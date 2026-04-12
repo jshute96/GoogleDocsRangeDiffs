@@ -1,6 +1,6 @@
-# Skeleton Chrome Extension
+# GoogleDocsDiffRange Chrome extension
 
-TODO: Project description goes here.
+This extension adds diff-between-versions functionality to Google Docs.
 
 ## Usage
 
@@ -12,7 +12,7 @@ TODO: Describe how to use the extension.
 
 1. Clone this repo and install dependencies:
    ```bash
-   git clone https://github.com/TODO/GoogleDocsDiffRange.git
+   git clone https://github.com/jshute96/GoogleDocsDiffRange.git
    cd GoogleDocsDiffRange
    npm install
    ```
