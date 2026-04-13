@@ -39,7 +39,7 @@ right. The DOM hierarchy:
 | `[role="listbox"][aria-label="Version type"]` | The version type dropdown options container |
 | `[role="option"]` (inside the listbox) | Dropdown options: "All versions", "Named versions", etc. |
 | `.docs-texteventtarget-iframe` | Hidden iframe where keyboard shortcuts must be dispatched |
-| `.docs-revisions-chromecover-content` | Full-page revision diff overlay (visible = in diff mode) |
+| `.docs-revisions-chromecover-content` | Full-page revision diff overlay (visible when in Version History mode) |
 
 ### Version listitem structure
 
@@ -75,6 +75,26 @@ new set of version entries.
   listitems with a new set.
 
 ## Network requests: `showrevision`
+
+### Interception approach
+
+We considered two approaches for rewriting `showrevision` URLs:
+
+- **`chrome.declarativeNetRequest`** — static or dynamic redirect rules that
+  rewrite URLs at the network layer. Rejected because the rules can't read
+  DOM state (the input field values or capture-mode flags), so they can't
+  support interactive/dynamic override values. Would only work for fixed
+  rewrites.
+- **XHR/fetch monkey-patching** (chosen) — inject a function into the MAIN
+  world that patches `XMLHttpRequest.prototype.open` and `window.fetch` to
+  rewrite URLs before they're sent. Can read DOM state (input fields,
+  `dataset` attributes) at rewrite time. Requires `chrome.scripting`
+  permission and `world: 'MAIN'` injection.
+
+### Request details
+
+Google Docs uses **XMLHttpRequest** (not `fetch`) for `showrevision`
+requests (observed April 2026). We patch both as a safety net.
 
 When the user clicks a version entry, Google Docs fetches the revision diff
 via an XHR to a URL like:
