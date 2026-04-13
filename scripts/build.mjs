@@ -46,18 +46,20 @@ for (const f of srcFiles) {
   }
 }
 
-// 4. Run tsc. Watch mode keeps tsc running until the user Ctrl-C's; we
-//    await its exit so signals route through the build script and a spawn
-//    failure surfaces as a non-zero exit instead of being silently
-//    swallowed. Non-watch mode just runs once and propagates the exit code.
-if (watch) {
-  const child = spawn('npx', ['tsc', '--watch'], { stdio: 'inherit', cwd: root });
-  const code = await new Promise((res, rej) => {
-    child.on('exit', (c) => res(c ?? 0));
-    child.on('error', rej);
-  });
-  process.exit(code);
-} else {
-  const r = spawnSync('npx', ['tsc'], { stdio: 'inherit', cwd: root });
-  if (r.status !== 0) process.exit(r.status ?? 1);
+// 4. Run tsc if there are any TypeScript files to compile. Skip if there
+//    are none (all extension code may be plain JS). Watch mode keeps tsc
+//    running until the user Ctrl-C's.
+const hasTsFiles = srcFiles.some(f => f.endsWith('.ts'));
+if (hasTsFiles) {
+  if (watch) {
+    const child = spawn('npx', ['tsc', '--watch'], { stdio: 'inherit', cwd: root });
+    const code = await new Promise((res, rej) => {
+      child.on('exit', (c) => res(c ?? 0));
+      child.on('error', rej);
+    });
+    process.exit(code);
+  } else {
+    const r = spawnSync('npx', ['tsc'], { stdio: 'inherit', cwd: root });
+    if (r.status !== 0) process.exit(r.status ?? 1);
+  }
 }

@@ -26,9 +26,9 @@ One-line descriptions of every source file, grouped by directory.
 | File | Description |
 |------|-------------|
 | `src/manifest.json` | Manifest V3 config: permissions, content scripts, service worker |
-| `src/background.js` | Service worker — handles `injectRevisionInterceptor` message, loads injected functions |
+| `src/background.js` | Service worker — handles `injectRevisionInterceptor` message, loads `background-injected.js` |
 | `src/background-injected.js` | MAIN world functions: XHR/fetch interceptor, `showRevisions()`, `openVersionHistory()` |
-| `src/content-revisions.js` | Content script: injects revision override UI into Version History panel |
+| `src/content-revisions.js` | Content script: injects revision override UI and From/To buttons into Version History |
 
 ## Scripts (`scripts/`)
 
