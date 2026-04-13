@@ -25,15 +25,56 @@ function revisionInterceptorFunc() {
     }
   }
 
+  // Add the .dr-btn-in-between class to From/To buttons on every version
+  // listitem positioned strictly between the From-highlighted and
+  // To-highlighted listitems. Mirrors updateInBetweenHighlights() in
+  // content-revisions.js so the interceptor can update highlights after
+  // a capture without crossing world boundaries.
+  function updateInBetweenHighlights() {
+    var all = document.querySelectorAll('.dr-btn-in-between');
+    for (var i = 0; i < all.length; i++) all[i].classList.remove('dr-btn-in-between');
+    var fromHL = document.querySelector('.dr-version-from-btn.dr-btn-highlighted');
+    var toHL = document.querySelector('.dr-version-to-btn.dr-btn-highlighted');
+    if (!fromHL || !toHL) return;
+    var fromItem = fromHL.closest('[role="listitem"]');
+    var toItem = toHL.closest('[role="listitem"]');
+    if (!fromItem || !toItem || fromItem === toItem) return;
+    var items = Array.prototype.slice.call(document.querySelectorAll('[aria-label="Versions"] [role="listitem"]'));
+    var fromIdx = items.indexOf(fromItem);
+    var toIdx = items.indexOf(toItem);
+    if (fromIdx === -1 || toIdx === -1) return;
+    var lo = Math.min(fromIdx, toIdx);
+    var hi = Math.max(fromIdx, toIdx);
+    for (var j = lo + 1; j < hi; j++) {
+      var fb = items[j].querySelector('.dr-version-from-btn');
+      var tb = items[j].querySelector('.dr-version-to-btn');
+      if (fb) fb.classList.add('dr-btn-in-between');
+      if (tb) tb.classList.add('dr-btn-in-between');
+    }
+  }
+
+  // Listen for reset messages from content-revisions.js (sent when the user
+  // picks a new option from the version type dropdown). Clears the
+  // window-level overrides so subsequent showrevision requests pass through
+  // unmodified.
+  window.addEventListener('message', function(e) {
+    if (e.source !== window) return;
+    if (e.data && e.data.source === 'diffrange' && e.data.action === 'resetRevisionOverrides') {
+      window.__drRevisionStart = undefined;
+      window.__drRevisionEnd = undefined;
+      console.log('[DiffRange] window overrides cleared');
+    }
+  });
+
   function rewriteRevisionUrl(url) {
     if (typeof url !== 'string') return url;
     if (url.indexOf('/showrevision?') === -1) return url;
 
     // Capture mode: when the user clicked "From here" or "To here" on a
-    // version, content-revisions.js sets document.body.dataset.drCaptureMode.
-    // Parse the original start/end from this URL and update the window-level
-    // overrides accordingly, then fall through to rewrite the URL with the
-    // (possibly updated) overrides.
+    // version, content-revisions.js sets document.body.dataset.drCaptureMode
+    // and marks the source listitem with .dr-pending-capture. Parse the
+    // original start/end from this URL and update the window-level overrides
+    // accordingly, then update which version's buttons are highlighted.
     var captureMode = document.body && document.body.dataset.drCaptureMode;
     if (captureMode) {
       var origStartMatch = url.match(/[?&]start=(\d+)/);
@@ -44,21 +85,54 @@ function revisionInterceptorFunc() {
       if (origStart !== null && origEnd !== null) {
         var newStart = window.__drRevisionStart != null ? parseInt(window.__drRevisionStart, 10) : null;
         var newEnd = window.__drRevisionEnd != null ? parseInt(window.__drRevisionEnd, 10) : null;
+        var tookBoth = false;
 
         if (captureMode === 'from') {
           newStart = origStart;
           // If end isn't set, or capturing this start would make an invalid
           // range (start >= end), take both bounds from this version.
-          if (newEnd == null || newStart >= newEnd) newEnd = origEnd;
+          if (newEnd == null || newStart >= newEnd) {
+            newEnd = origEnd;
+            tookBoth = true;
+          }
         } else if (captureMode === 'to') {
           newEnd = origEnd;
-          if (newStart == null || newStart >= newEnd) newStart = origStart;
+          if (newStart == null || newStart >= newEnd) {
+            newStart = origStart;
+            tookBoth = true;
+          }
+        } else if (captureMode === 'both') {
+          // Direct click on the version (not via From/To buttons): take
+          // both bounds from this version's natural URL.
+          newStart = origStart;
+          newEnd = origEnd;
+          tookBoth = true;
         }
 
         window.__drRevisionStart = newStart;
         window.__drRevisionEnd = newEnd;
         syncInputsFromOverrides();
-        console.log('[DiffRange] capture ' + captureMode + ': start=' + newStart + ' end=' + newEnd);
+
+        // Update which version's From/To buttons are highlighted
+        var pending = document.querySelector('.dr-pending-capture');
+        if (pending) {
+          function clearAndHighlight(btnClass, listitem) {
+            var all = document.querySelectorAll('.' + btnClass);
+            for (var i = 0; i < all.length; i++) all[i].classList.remove('dr-btn-highlighted');
+            var btn = listitem.querySelector('.' + btnClass);
+            if (btn) btn.classList.add('dr-btn-highlighted');
+          }
+          if (captureMode === 'from' || tookBoth) {
+            clearAndHighlight('dr-version-from-btn', pending);
+          }
+          if (captureMode === 'to' || tookBoth) {
+            clearAndHighlight('dr-version-to-btn', pending);
+          }
+          pending.classList.remove('dr-pending-capture');
+          updateInBetweenHighlights();
+        }
+
+        console.log('[DiffRange] capture ' + captureMode + ': start=' + newStart + ' end=' + newEnd + (tookBoth ? ' (took both)' : ''));
       }
 
       // Consume the capture flag — only one URL rewrite per button click

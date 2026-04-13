@@ -7,7 +7,8 @@
 //
 // Also injects "From here" / "To here" buttons on each version listitem,
 // allowing users to pick range endpoints by clicking versions rather than
-// typing revision numbers.
+// typing revision numbers. Selected endpoints highlight in solid blue;
+// versions between them highlight in light blue.
 //
 // The fetch/XHR interception runs in the MAIN world (same JS context as
 // the page) so it can monkey-patch the page's own network calls. The UI
@@ -86,9 +87,13 @@
       if (btn.disabled) return;
       // Click the first version listitem to trigger a showrevision request.
       // The interceptor will rewrite start/end from the input fields.
+      // Set drSuppressCapture so the version-list click delegation doesn't
+      // mistakenly mark this as a 'both' capture from that version.
       var firstItem = document.querySelector('[aria-label="Versions"] [role="listitem"]');
       if (firstItem) {
+        document.body.dataset.drSuppressCapture = '1';
         firstItem.click();
+        delete document.body.dataset.drSuppressCapture;
         console.log('[DiffRange] View diff: triggered version click with overrides');
       }
     });
@@ -103,11 +108,25 @@
   // Inject "From here" / "To here" buttons into each version listitem.
   // Clicking a button:
   //   1. Sets document.body.dataset.drCaptureMode ('from' or 'to')
-  //   2. Triggers the listitem's normal click → fires a showrevision request
-  //   3. The MAIN world interceptor reads the capture mode, parses the URL's
-  //      original start/end, and updates window.__drRevisionStart/__drRevisionEnd
-  //      and the UI inputs accordingly before rewriting the URL.
+  //   2. Marks the listitem with .dr-pending-capture so the interceptor can
+  //      find which listitem the request came from (to update highlight state)
+  //   3. Triggers the listitem's normal click → fires a showrevision request
+  //   4. The MAIN world interceptor reads the capture mode, parses the URL's
+  //      original start/end, updates window.__drRevisionStart/__drRevisionEnd
+  //      and the UI inputs, and toggles the .dr-btn-highlighted class on the
+  //      from/to button(s) of the captured listitem.
   function injectVersionButtons() {
+    // Inject the highlight stylesheet once per page
+    if (!document.getElementById('dr-version-button-styles')) {
+      var style = document.createElement('style');
+      style.id = 'dr-version-button-styles';
+      style.textContent =
+        '.dr-version-button { padding:2px 8px; border:1px solid #dadce0; border-radius:4px; background:#fff; color:#1a73e8; cursor:pointer; font-size:11px; font-family:inherit; }' +
+        '.dr-version-button.dr-btn-in-between:not(.dr-btn-highlighted) { background:#aecbfa; color:#1967d2; border-color:#8ab4f8; }' +
+        '.dr-version-button.dr-btn-highlighted { background:#1a73e8; color:#fff; border-color:#1a73e8; }';
+      document.head.appendChild(style);
+    }
+
     var items = document.querySelectorAll('[aria-label="Versions"] [role="listitem"]');
     items.forEach(function(item) {
       if (item.querySelector('.dr-version-buttons')) return;
@@ -119,7 +138,7 @@
       function makeBtn(label, mode) {
         var b = document.createElement('button');
         b.textContent = label;
-        b.style.cssText = 'padding:2px 8px;border:1px solid #dadce0;border-radius:4px;background:#fff;color:#1a73e8;cursor:pointer;font-size:11px;font-family:inherit;';
+        b.className = 'dr-version-button dr-version-' + mode + '-btn';
         // Stop propagation so the listitem's own click handler doesn't fire
         // from the button click — we explicitly call item.click() below to
         // control timing (set the flag first).
@@ -128,6 +147,10 @@
         b.addEventListener('mouseup', suppress);
         b.addEventListener('click', function(e) {
           e.stopPropagation();
+          // Clear any old pending marker from a previous click
+          var oldPending = document.querySelector('.dr-pending-capture');
+          if (oldPending) oldPending.classList.remove('dr-pending-capture');
+          item.classList.add('dr-pending-capture');
           document.body.dataset.drCaptureMode = mode;
           item.click();
         });
@@ -139,6 +162,98 @@
 
       item.appendChild(row);
     });
+
+    setupVersionListListener();
+    setupVersionTypeDropdownListener();
+    // Re-apply in-between highlights to any newly-added items (e.g., when the
+    // user expands a version's detailed sub-versions, new listitems appear).
+    updateInBetweenHighlights();
+  }
+
+  // Add the .dr-btn-in-between class to From/To buttons on every version
+  // listitem positioned strictly between the From-highlighted and
+  // To-highlighted listitems. Buttons at the boundaries keep their solid
+  // .dr-btn-highlighted; buttons outside the range have neither class.
+  function updateInBetweenHighlights() {
+    var all = document.querySelectorAll('.dr-btn-in-between');
+    for (var i = 0; i < all.length; i++) all[i].classList.remove('dr-btn-in-between');
+
+    var fromHL = document.querySelector('.dr-version-from-btn.dr-btn-highlighted');
+    var toHL = document.querySelector('.dr-version-to-btn.dr-btn-highlighted');
+    if (!fromHL || !toHL) return;
+
+    var fromItem = fromHL.closest('[role="listitem"]');
+    var toItem = toHL.closest('[role="listitem"]');
+    if (!fromItem || !toItem || fromItem === toItem) return;
+
+    var items = Array.prototype.slice.call(document.querySelectorAll('[aria-label="Versions"] [role="listitem"]'));
+    var fromIdx = items.indexOf(fromItem);
+    var toIdx = items.indexOf(toItem);
+    if (fromIdx === -1 || toIdx === -1) return;
+    var lo = Math.min(fromIdx, toIdx);
+    var hi = Math.max(fromIdx, toIdx);
+    for (var j = lo + 1; j < hi; j++) {
+      var fb = items[j].querySelector('.dr-version-from-btn');
+      var tb = items[j].querySelector('.dr-version-to-btn');
+      if (fb) fb.classList.add('dr-btn-in-between');
+      if (tb) tb.classList.add('dr-btn-in-between');
+    }
+  }
+
+  // Clear all revision overrides — the input fields, the window-level values
+  // (via postMessage to MAIN world), and all From/To button highlights.
+  // Called when the user picks a different option from the version type
+  // dropdown ("All versions" / "Named versions" / etc.) since that loads a
+  // different set of versions and the captured range no longer applies.
+  function resetRevisionOverrides() {
+    var s = document.getElementById('dr-revision-start');
+    var e = document.getElementById('dr-revision-end');
+    if (s) { s.value = ''; s.dispatchEvent(new Event('input', {bubbles: true})); }
+    if (e) { e.value = ''; e.dispatchEvent(new Event('input', {bubbles: true})); }
+    var hl = document.querySelectorAll('.dr-btn-highlighted, .dr-btn-in-between');
+    for (var i = 0; i < hl.length; i++) {
+      hl[i].classList.remove('dr-btn-highlighted');
+      hl[i].classList.remove('dr-btn-in-between');
+    }
+    window.postMessage({ source: 'diffrange', action: 'resetRevisionOverrides' }, '*');
+    console.log('[DiffRange] revision overrides reset');
+  }
+
+  // Listen for clicks on the version type dropdown options. Picking any
+  // option (even the currently-selected one) triggers a reset since the
+  // version list reloads.
+  function setupVersionTypeDropdownListener() {
+    var listbox = document.querySelector('[role="listbox"][aria-label="Version type"]');
+    if (!listbox || listbox.dataset.drListenerAttached) return;
+    listbox.dataset.drListenerAttached = '1';
+    listbox.addEventListener('click', function(e) {
+      if (e.target.closest('[role="option"]')) {
+        resetRevisionOverrides();
+      }
+    }, true);
+  }
+
+  // Set up a delegated capture-phase click listener on the versions list so
+  // that clicking a version directly (not via our From/To buttons) is treated
+  // as capturing both bounds from that version. Runs in capture phase so it
+  // fires before Google's own click handler. Idempotent — only attaches once
+  // per versions list element.
+  function setupVersionListListener() {
+    var list = document.querySelector('[aria-label="Versions"]');
+    if (!list || list.dataset.drListenerAttached) return;
+    list.dataset.drListenerAttached = '1';
+    list.addEventListener('click', function(e) {
+      // Skip clicks on buttons (our From/To, more-actions menu) or textareas (rename)
+      if (e.target.closest('button') || e.target.closest('textarea')) return;
+      // Skip if View diff or a From/To button already set the mode
+      if (document.body.dataset.drCaptureMode || document.body.dataset.drSuppressCapture) return;
+      var item = e.target.closest('[role="listitem"]');
+      if (!item) return;
+      var oldPending = document.querySelector('.dr-pending-capture');
+      if (oldPending) oldPending.classList.remove('dr-pending-capture');
+      item.classList.add('dr-pending-capture');
+      document.body.dataset.drCaptureMode = 'both';
+    }, true);
   }
 
   // Set up a MutationObserver to detect when the Version History panel opens.
@@ -147,10 +262,12 @@
     // Check if already present (panel was open before our script loaded)
     injectRevisionOverrides();
     injectVersionButtons();
+    setupVersionTypeDropdownListener();
 
     new MutationObserver(function() {
       injectRevisionOverrides();
       injectVersionButtons();
+      setupVersionTypeDropdownListener();
     }).observe(document.body, { childList: true, subtree: true });
   }
 
