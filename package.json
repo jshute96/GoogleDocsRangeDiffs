@@ -8,8 +8,9 @@
     "build": "node scripts/build.mjs",
     "watch": "node scripts/build.mjs --watch",
     "pretest": "node scripts/build.mjs",
-    "test": "playwright test",
-    "test:headed": "playwright test --headed",
+    "test": "npm run test:extension & npm run test:no-extension & wait",
+    "test:extension": "playwright test -c testing/extension/playwright.config.ts",
+    "test:no-extension": "playwright test -c testing/no-extension/playwright.config.ts",
     "clean": "rm -rf dist test-results playwright-report"
   },
   "devDependencies": {

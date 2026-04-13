@@ -11,7 +11,6 @@ One-line descriptions of every source file, grouped by directory.
 | `TODO.md` | Post-merge tasks: TS conversion, icons, tests, options page |
 | `package.json` | Node project manifest, scripts, devDependencies |
 | `tsconfig.json` | TypeScript compiler config for the extension build |
-| `playwright.config.ts` | Playwright test runner config |
 | `.gitignore` | Git ignore rules |
 
 ## Claude Commands (`.claude/commands/`)
@@ -36,12 +35,21 @@ One-line descriptions of every source file, grouped by directory.
 | File | Description |
 |------|-------------|
 | `scripts/build.mjs` | Cleans `dist/`, copies icons and manifest, then runs `tsc` |
+| `scripts/open-browser-with-extension.sh` | Opens Playwright Chromium with extension loaded, persistent profile |
+| `scripts/open-browser-without-extension.sh` | Opens Playwright Chromium without extension, persistent profile |
+| `scripts/inspect-revision-history.mjs` | Connects to running browsers via CDP, takes screenshots, dumps extension DOM |
 
-## Tests (`tests/`)
+## Tests (`testing/`)
 
 | File | Description |
 |------|-------------|
-| `tests/fixtures/extension.ts` | Playwright fixtures: persistent Chromium context with the extension loaded |
+| `testing/test-env.ts` | Shared test env: paths, CDP port constants, test config loader |
+| `testing/extension/playwright.config.ts` | Playwright config for live tests with extension |
+| `testing/extension/fixtures.ts` | Fixtures: connects via CDP to extension browser, provides service worker |
+| `testing/extension/smoke.spec.ts` | Smoke test: opens a Google Doc with extension, checks injection |
+| `testing/no-extension/playwright.config.ts` | Playwright config for live tests without extension |
+| `testing/no-extension/fixtures.ts` | Fixtures: connects via CDP to no-extension browser |
+| `testing/no-extension/smoke.spec.ts` | Smoke test: opens a Google Doc without extension as baseline |
 
 ## Design Docs (`docs/`)
 
@@ -49,3 +57,4 @@ One-line descriptions of every source file, grouped by directory.
 |------|-------------|
 | `file-index.md` | This file — one-line descriptions of every source file |
 | `notes-on-google-docs.md` | Google Docs DOM structure, event handling, network requests, extension architecture |
+| `notes-on-testing.md` | Testing setup, Google login challenges, what works (connectOverCDP) and what doesn't |

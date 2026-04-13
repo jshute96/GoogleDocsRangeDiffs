@@ -60,18 +60,43 @@ npm run watch        # rebuild on TS changes
 
 ## Testing
 
+Tests run against real Google Docs with a logged-in user.
+
+### Setup
+
+1. Build the extension: `npm run build`
+2. Open browsers and log in to Google (sessions persist across runs):
+   ```bash
+   scripts/open-browser-with-extension.sh https://docs.google.com
+   scripts/open-browser-without-extension.sh https://docs.google.com
+   ```
+3. Keep the browsers open — tests connect to them via CDP.
+
+### Running tests
+
+With both browsers open and logged in:
+
 ```bash
-npm test             # run Playwright e2e tests
-npm run test:headed  # same, with a visible browser
+npm test                     # all tests (extension + no-extension in parallel)
+npm run test:extension       # only tests with the extension loaded
+npm run test:no-extension    # only tests without the extension (baseline)
 ```
+
+### Interactive browser scripts
+
+```bash
+scripts/open-browser-with-extension.sh [url]      # Playwright Chromium + extension (port 9222)
+scripts/open-browser-without-extension.sh [url]   # Playwright Chromium, no extension (port 9223)
+```
+
+Both use persistent profiles so Google login survives across runs.
+Tests connect to these browsers via Chrome DevTools Protocol.
 
 ## Layout
 
 - `src/` — Extension source (TypeScript) and `manifest.json`
 - `dist/` — built extension (gitignored, loaded unpacked into Chrome)
-- `scripts/build.mjs` — build script (cleans `dist/`, copies icons and
-  manifest, runs `tsc`)
-- `tests/e2e/` — Playwright tests
-- `tests/fixtures/extension.ts` — fixture that loads the extension and
-  exposes its service worker
-- `docs/` — design docs and the file index
+- `scripts/` — build script, browser-opening scripts, inspection tools
+- `testing/` — Playwright test suites (extension and no-extension)
+- `docs/` — design docs
+- `docs/file-index.md` — description of all files in the project

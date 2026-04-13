@@ -19,3 +19,8 @@ dist/
 /playwright-report/
 /blob-report/
 /.playwright/
+
+# test data and browser profiles (contain credentials/sessions)
+testing/test_config.json
+.chrome-extension-profile/
+.chrome-no-extension-profile/
