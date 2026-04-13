@@ -3,11 +3,20 @@
   "name": "GoogleDocsDiffRange",
   "version": "0.1.0",
   "description": "Adds diff-between-versions feature to Google Docs",
-  "permissions": ["activeTab"],
+  "permissions": ["activeTab", "scripting", "tabs"],
+  "host_permissions": [
+    "https://docs.google.com/*"
+  ],
   "background": {
-    "service_worker": "background.js",
-    "type": "module"
+    "service_worker": "background.js"
   },
+  "content_scripts": [
+    {
+      "matches": ["https://docs.google.com/*"],
+      "js": ["content-revisions.js"],
+      "run_at": "document_idle"
+    }
+  ],
   "action": {
     "default_title": "GoogleDocsDiffRange",
     "default_icon": {

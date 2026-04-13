@@ -8,6 +8,7 @@ One-line descriptions of every source file, grouped by directory.
 |------|-------------|
 | `README.md` | Primary project documentation: setup, usage, commands |
 | `CLAUDE.md` | Guidance for AI agents working in this repository |
+| `TODO.md` | Post-merge tasks: TS conversion, icons, tests, options page |
 | `package.json` | Node project manifest, scripts, devDependencies |
 | `tsconfig.json` | TypeScript compiler config for the extension build |
 | `playwright.config.ts` | Playwright test runner config |
@@ -24,14 +25,16 @@ One-line descriptions of every source file, grouped by directory.
 
 | File | Description |
 |------|-------------|
-| `src/manifest.json` | Manifest V3 manifest, copied verbatim into `dist/` |
-| `src/background.ts` | MV3 service worker — TODO |
+| `src/manifest.json` | Manifest V3 config: permissions, content scripts, service worker |
+| `src/background.js` | Service worker — handles `injectRevisionInterceptor` message, loads injected functions |
+| `src/background-injected.js` | MAIN world functions: XHR/fetch interceptor, `showRevisions()`, `openVersionHistory()` |
+| `src/content-revisions.js` | Content script: injects revision override UI into Version History panel |
 
 ## Scripts (`scripts/`)
 
 | File | Description |
 |------|-------------|
-| `scripts/build.mjs` | Cleans `dist/`, copies icons and manifest, then runs `tsc` |
+| `scripts/build.mjs` | Cleans `dist/`, copies icons, manifest, and JS files, then runs `tsc` |
 
 ## Tests (`tests/`)
 
@@ -44,3 +47,4 @@ One-line descriptions of every source file, grouped by directory.
 | File | Description |
 |------|-------------|
 | `file-index.md` | This file — one-line descriptions of every source file |
+| `notes-on-google-docs.md` | Google Docs DOM structure, event handling, network requests, extension architecture |

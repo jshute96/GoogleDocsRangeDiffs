@@ -35,6 +35,17 @@ await cp(resolve(root, 'src/icons'), resolve(dist, 'icons'), { recursive: true }
 //    unpacked from dist/.
 await cp(resolve(root, 'src/manifest.json'), resolve(dist, 'manifest.json'));
 
+// 3b. Copy plain JS files into dist/. Content scripts and injected
+//     functions are plain JavaScript (not TypeScript) so they need to be
+//     copied alongside the tsc-compiled output.
+import { readdir } from 'node:fs/promises';
+const srcFiles = await readdir(resolve(root, 'src'));
+for (const f of srcFiles) {
+  if (f.endsWith('.js')) {
+    await cp(resolve(root, 'src', f), resolve(dist, f));
+  }
+}
+
 // 4. Run tsc. Watch mode keeps tsc running until the user Ctrl-C's; we
 //    await its exit so signals route through the build script and a spawn
 //    failure surfaces as a non-zero exit instead of being silently
