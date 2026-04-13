@@ -2,7 +2,7 @@
   "name": "google-docs-diff-range",
   "version": "0.1.0",
   "private": true,
-  "description": "Chrome extension that adds diff-betwee-versions feature to Google Docs",
+  "description": "Chrome extension that adds diff-between-versions feature to Google Docs",
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",

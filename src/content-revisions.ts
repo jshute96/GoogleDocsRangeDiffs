@@ -243,7 +243,9 @@
     if (!list || list.dataset.drListenerAttached) return;
     list.dataset.drListenerAttached = '1';
     list.addEventListener('click', (e: Event) => {
-      // Skip clicks on buttons (our From/To, more-actions menu) or textareas (rename)
+      // Skip clicks on buttons (more-actions menu) or textareas (rename).
+      // From/To button clicks are handled by the drCaptureMode check below —
+      // they set the flag before programmatically calling item.click().
       if ((e.target as Element).closest('button') || (e.target as Element).closest('textarea')) return;
       // Skip if View diff or a From/To button already set the mode
       if (document.body.dataset.drCaptureMode || document.body.dataset.drSuppressCapture) return;

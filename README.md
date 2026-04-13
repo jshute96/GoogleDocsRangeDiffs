@@ -1,4 +1,4 @@
-# GoogleDocsDiffRange Chrome extension
+# ![icon](src/icons/icon-48.png) GoogleDocsDiffRange Chrome extension
 
 This extension adds diff-between-versions functionality to Google Docs.
 
@@ -67,7 +67,7 @@ npm run test:headed  # same, with a visible browser
 
 ## Layout
 
-- `src/` — Extension source (TypeScript + plain JS) and `manifest.json`
+- `src/` — Extension source (TypeScript) and `manifest.json`
 - `dist/` — built extension (gitignored, loaded unpacked into Chrome)
 - `scripts/build.mjs` — build script (cleans `dist/`, copies icons and
   manifest, runs `tsc`)
