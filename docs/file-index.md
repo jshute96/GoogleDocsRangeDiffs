@@ -26,15 +26,16 @@ One-line descriptions of every source file, grouped by directory.
 | File | Description |
 |------|-------------|
 | `src/manifest.json` | Manifest V3 config: permissions, content scripts, service worker |
-| `src/background.js` | Service worker — handles `injectRevisionInterceptor` message, loads `background-injected.js` |
-| `src/background-injected.js` | MAIN world functions: XHR/fetch interceptor, `showRevisions()`, `openVersionHistory()` |
-| `src/content-revisions.js` | Content script: injects revision override UI and From/To buttons into Version History |
+| `src/types.d.ts` | Global type declarations: Window extensions, service worker globals |
+| `src/background.ts` | Service worker — handles `injectRevisionInterceptor` message, loads `background-injected.js` |
+| `src/background-injected.ts` | MAIN world functions: XHR/fetch interceptor, `showRevisions()`, `openVersionHistory()` |
+| `src/content-revisions.ts` | Content script: injects revision override UI and From/To buttons into Version History |
 
 ## Scripts (`scripts/`)
 
 | File | Description |
 |------|-------------|
-| `scripts/build.mjs` | Cleans `dist/`, copies icons, manifest, and JS files, then runs `tsc` |
+| `scripts/build.mjs` | Cleans `dist/`, copies icons and manifest, then runs `tsc` |
 
 ## Tests (`tests/`)
 

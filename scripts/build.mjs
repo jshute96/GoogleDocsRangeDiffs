@@ -11,7 +11,7 @@
 //
 // Run with `npm run build`. Pass --watch to keep tsc running.
 //
-// Note on watch mode: only TypeScript is watched. If you edit
+// Note on watch mode: only TypeScript files are watched. If you edit
 // src/manifest.json or swap out icon files, re-run `npm run build`.
 
 import { rm, mkdir, cp } from 'node:fs/promises';
@@ -35,31 +35,16 @@ await cp(resolve(root, 'src/icons'), resolve(dist, 'icons'), { recursive: true }
 //    unpacked from dist/.
 await cp(resolve(root, 'src/manifest.json'), resolve(dist, 'manifest.json'));
 
-// 3b. Copy plain JS files into dist/. Content scripts and injected
-//     functions are plain JavaScript (not TypeScript) so they need to be
-//     copied alongside the tsc-compiled output.
-import { readdir } from 'node:fs/promises';
-const srcFiles = await readdir(resolve(root, 'src'));
-for (const f of srcFiles) {
-  if (f.endsWith('.js')) {
-    await cp(resolve(root, 'src', f), resolve(dist, f));
-  }
-}
-
-// 4. Run tsc if there are any TypeScript files to compile. Skip if there
-//    are none (all extension code may be plain JS). Watch mode keeps tsc
+// 4. Run tsc to compile src/*.ts -> dist/*.js. Watch mode keeps tsc
 //    running until the user Ctrl-C's.
-const hasTsFiles = srcFiles.some(f => f.endsWith('.ts'));
-if (hasTsFiles) {
-  if (watch) {
-    const child = spawn('npx', ['tsc', '--watch'], { stdio: 'inherit', cwd: root });
-    const code = await new Promise((res, rej) => {
-      child.on('exit', (c) => res(c ?? 0));
-      child.on('error', rej);
-    });
-    process.exit(code);
-  } else {
-    const r = spawnSync('npx', ['tsc'], { stdio: 'inherit', cwd: root });
-    if (r.status !== 0) process.exit(r.status ?? 1);
-  }
+if (watch) {
+  const child = spawn('npx', ['tsc', '--watch'], { stdio: 'inherit', cwd: root });
+  const code = await new Promise((res, rej) => {
+    child.on('exit', (c) => res(c ?? 0));
+    child.on('error', rej);
+  });
+  process.exit(code);
+} else {
+  const r = spawnSync('npx', ['tsc'], { stdio: 'inherit', cwd: root });
+  if (r.status !== 0) process.exit(r.status ?? 1);
 }

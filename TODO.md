@@ -1,7 +1,5 @@
 # TODO
 
-- [ ] Convert plain JS files (`content-revisions.js`, `background.js`,
-      `background-injected.js`) to TypeScript
 - [ ] Add extension icons (16/48/128px) — currently referenced in
       `manifest.json` but the files don't exist
 - [ ] Add e2e tests using the existing Playwright fixture

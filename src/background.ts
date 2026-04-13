@@ -5,17 +5,17 @@
 // background-injected.js via importScripts.
 importScripts('background-injected.js');
 
-chrome.runtime.onMessage.addListener(function(msg, sender) {
+chrome.runtime.onMessage.addListener((msg: { type: string }, sender: chrome.runtime.MessageSender) => {
   // From Docs content script: inject the revision interceptor that
   // monkey-patches XHR/fetch to rewrite showrevision start/end params.
-  if (msg.type === 'injectRevisionInterceptor' && sender.tab) {
+  if (msg.type === 'injectRevisionInterceptor' && sender.tab?.id != null) {
+    const tabId = sender.tab.id;
     chrome.scripting.executeScript({
-      target: { tabId: sender.tab.id },
+      target: { tabId },
       func: revisionInterceptorFunc,
       world: 'MAIN'
-    }).catch(function(err) {
-      console.warn('[DiffRange] injectRevisionInterceptor failed for tab', sender.tab.id, ':', err.message);
+    }).catch((err: Error) => {
+      console.warn('[DiffRange] injectRevisionInterceptor failed for tab', tabId, ':', err.message);
     });
-    return;
   }
 });
