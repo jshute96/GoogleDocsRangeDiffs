@@ -180,6 +180,19 @@
       row.appendChild(makeBtn('To here', 'to'));
 
       item.appendChild(row);
+
+      // Consume deferred-highlight flags set by the MAIN-world interceptor
+      // when an init capture ran before these buttons existed. Apply the
+      // highlight class now that the buttons are in the DOM.
+      const el = item as HTMLElement;
+      if (el.dataset.drHighlightFrom) {
+        row.querySelector('.dr-version-from-btn')?.classList.add('dr-btn-highlighted');
+        delete el.dataset.drHighlightFrom;
+      }
+      if (el.dataset.drHighlightTo) {
+        row.querySelector('.dr-version-to-btn')?.classList.add('dr-btn-highlighted');
+        delete el.dataset.drHighlightTo;
+      }
     });
 
     setupVersionListListener();
@@ -350,6 +363,10 @@
     listbox.addEventListener('click', (e: Event) => {
       if ((e.target as Element).closest('[role="option"]')) {
         resetRevisionOverrides();
+        // Docs reloads the versions list with a new set; the first
+        // showrevision after this should re-initialize From/To highlights
+        // on whichever version is selected by default.
+        document.body.dataset.drInitCapture = '1';
       }
     }, true);
   }
@@ -410,12 +427,49 @@
     injectRevisionOverrides();
     injectVersionButtons();
     setupVersionTypeDropdownListener();
+    // Arm init capture if the chromecover is already in the DOM at script
+    // load time (rare; handles a script-after-panel-open bootstrap).
+    if (document.querySelector('.docs-revisions-chromecover-content')) {
+      document.body.dataset.drInitCapture = '1';
+    }
 
-    new MutationObserver(() => {
+    new MutationObserver((muts) => {
+      armIfChromecoverAdded(muts);
       injectRevisionOverrides();
       injectVersionButtons();
       setupVersionTypeDropdownListener();
     }).observe(document.body, { childList: true, subtree: true });
+  }
+
+  // Detect entry into version history view — Docs attaches the revisions
+  // chromecover top-bar to the DOM each time the user enters version history,
+  // both on first open and on re-entry after the back arrow (which detaches
+  // it). Driven by MutationRecord.addedNodes rather than polling
+  // querySelector, because the chromecover element may persist as a
+  // display:none subtree between sessions and also because Docs can
+  // detach-and-reattach it within a single MutationObserver batch (so polling
+  // after the batch sees it continuously present).
+  //
+  // Must fire before the auto-fired showrevision to arm the init capture:
+  // Docs sends the XHR synchronously when it enters version-history mode, so
+  // we need the flag set by the time that batch of mutations is processed.
+  function armIfChromecoverAdded(muts: MutationRecord[]): void {
+    for (const m of muts) {
+      for (const n of Array.from(m.addedNodes)) {
+        if (n.nodeType !== 1) continue;
+        const el = n as Element;
+        if (el.classList?.contains('docs-revisions-chromecover-content')
+            || el.querySelector?.('.docs-revisions-chromecover-content')) {
+          document.body.dataset.drInitCapture = '1';
+          // Clear any stale window-level overrides left by the previous
+          // session so the URL-rewrite path doesn't apply them before init
+          // capture runs.
+          window.postMessage({ source: 'diffrange', action: 'resetRevisionOverrides' }, '*');
+          console.log('[DiffRange] version history entry detected — init capture armed');
+          return;
+        }
+      }
+    }
   }
 
   // --- Initialization ---

@@ -158,6 +158,63 @@ Key parameters:
 The response contains the revision diff data that populates the left-side
 diff view and the "Total: N edits" counter.
 
+### Auto-fired showrevision (no click)
+
+Docs fires `showrevision` on its own in three situations:
+
+- **Panel first opens.** Selected (top) version's range is fetched.
+- **Dropdown view switched** ("All versions" → "Named versions", etc.).
+  Versions list reloads; the default-selected version's range is fetched.
+- **Re-entry after exit.** After the back arrow is pressed, the chromecover
+  top-bar detaches. On re-entry, Docs reattaches it and fires a fresh
+  `showrevision` for the current version.
+
+Observed timing (April 2026): the target listitem is already in the DOM
+**and** already has the `SelectedTile` class at the moment the XHR fires.
+No race against DOM population — the interceptor can look up the selected
+listitem synchronously at rewrite time.
+
+### Init-capture flow
+
+Extension captures these no-click requests so From/To highlights and the
+Start/End input fields stay in sync with the view:
+
+- Content script (`content-revisions.ts`) sets
+  `document.body.dataset.drInitCapture = '1'` on three triggers:
+  - Mutation records show `.docs-revisions-chromecover-content` being
+    added to the DOM (covers first open **and** re-entry).
+  - The version-type dropdown option is clicked.
+  - The chromecover is already present at script load (bootstrap corner
+    case).
+- MAIN world interceptor, at the top of `rewriteRevisionUrl`: if the flag
+  is set **and** `drCaptureMode` is not, find the `SelectedTile` listitem,
+  mark it `.dr-pending-capture`, set `drCaptureMode = 'both'`, and clear
+  the init flag. The existing 'both' capture branch takes it from there.
+- If `drCaptureMode` is already set (user clicked From/To first), the init
+  flag is preserved — the user's capture takes precedence and init waits
+  for the next auto-fire.
+
+### Why mutation records, not querySelector polling
+
+- **Hidden, not removed.** The chromecover element isn't removed on exit
+  — its parent just gets `display: none`. `querySelector` still finds it
+  when version history is closed.
+- **Batched detach+attach.** On re-entry Docs can detach-and-reattach the
+  element within a single MutationObserver batch; polling after the batch
+  still sees it continuously.
+- **Fix.** Inspect `MutationRecord.addedNodes` for the chromecover —
+  fires reliably on every entry (including re-entry).
+
+### Deferred highlight for newly-appeared listitems
+
+- Init capture may fire before `injectVersionButtons` wires up the From/To
+  buttons on a freshly-created listitem (Docs fires the XHR fast).
+- `clearAndHighlight` falls back to setting
+  `dataset.drHighlightFrom` / `dataset.drHighlightTo` on the target
+  listitem.
+- `injectVersionButtons` reads those flags when it creates the buttons
+  and applies `.dr-btn-highlighted` immediately.
+
 ## Event handling
 
 ### Closure Library `jsaction` system

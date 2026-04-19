@@ -80,6 +80,34 @@ function revisionInterceptorFunc(): void {
     // Track what we captured, if anything: 'from' | 'to' | 'both' | null.
     let capturedAs: string | null = null;
 
+    // Init capture: on panel open, dropdown switch, or re-entry after the
+    // back arrow, Docs auto-fires a showrevision for the selected (top)
+    // version with no click involved. content-revisions.ts sets
+    // document.body.dataset.drInitCapture in those moments. We claim the
+    // request by locating the currently-selected listitem (SelectedTile class)
+    // and converting this into a standard 'both' capture so the rest of the
+    // capture-mode branch can highlight From/To on it uniformly. We only
+    // consume the flag when drCaptureMode isn't already set — if a user click
+    // interleaved first, that capture takes precedence and init waits.
+    if (document.body?.dataset.drInitCapture && !document.body?.dataset.drCaptureMode) {
+      const items = document.querySelectorAll('[aria-label="Versions"] [role="listitem"]');
+      let selected: Element | null = null;
+      for (let i = 0; i < items.length; i++) {
+        const c = (items[i] as HTMLElement).className || '';
+        if (c.indexOf('SelectedTile') !== -1 && c.indexOf('UnselectedTile') === -1) {
+          selected = items[i];
+          break;
+        }
+      }
+      if (selected) {
+        const oldPending = document.querySelector('.dr-pending-capture');
+        if (oldPending) oldPending.classList.remove('dr-pending-capture');
+        selected.classList.add('dr-pending-capture');
+        document.body.dataset.drCaptureMode = 'both';
+        delete document.body.dataset.drInitCapture;
+      }
+    }
+
     // Capture mode: when the user clicked "From here" or "To here" on a
     // version, content-revisions.ts sets document.body.dataset.drCaptureMode
     // and marks the source listitem with .dr-pending-capture. Parse the
@@ -134,8 +162,21 @@ function revisionInterceptorFunc(): void {
           const clearAndHighlight = (btnClass: string, listitem: Element): void => {
             const all = document.querySelectorAll('.' + btnClass);
             for (let i = 0; i < all.length; i++) all[i].classList.remove('dr-btn-highlighted');
+            // Clear any stale deferred-highlight flags on other listitems so
+            // only the new target carries the pending highlight.
+            const dsKey = btnClass === 'dr-version-from-btn' ? 'drHighlightFrom' : 'drHighlightTo';
+            const items = document.querySelectorAll('[aria-label="Versions"] [role="listitem"]');
+            for (let i = 0; i < items.length; i++) delete (items[i] as HTMLElement).dataset[dsKey];
             const btn = listitem.querySelector('.' + btnClass);
-            if (btn) btn.classList.add('dr-btn-highlighted');
+            if (btn) {
+              btn.classList.add('dr-btn-highlighted');
+            } else {
+              // Init capture can fire before content-revisions.ts injects the
+              // From/To buttons on a freshly-appeared listitem. Mark the
+              // listitem with a dataset flag; injectVersionButtons will apply
+              // the highlight class the moment it creates the button.
+              (listitem as HTMLElement).dataset[dsKey] = '1';
+            }
           };
           if (captureMode === 'from' || tookBoth) {
             clearAndHighlight('dr-version-from-btn', pending);

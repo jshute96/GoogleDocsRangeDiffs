@@ -58,3 +58,4 @@ One-line descriptions of every source file, grouped by directory.
 | `file-index.md` | This file — one-line descriptions of every source file |
 | `notes-on-google-docs.md` | Google Docs DOM structure, event handling, network requests, extension architecture |
 | `notes-on-testing.md` | Testing setup, Google login challenges, what works (connectOverCDP) and what doesn't |
+| `notes-on-ui-debugging.md` | Playwright+CDP tips for interactive debug scripts: extension reload, DOM probing, style source lookup |

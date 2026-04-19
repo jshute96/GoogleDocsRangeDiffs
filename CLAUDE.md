@@ -14,6 +14,10 @@ repository. See `README.md` for setup instructions and available commands.
     - If a doc section grows past ~8 lines, give it sub-headings.
     - Prefer bullets to paragraphs; prefer short bullets to long bullets.
   - When adding a new feature, you can add new sections in the relevant design doc rather than appending to an existing one.
+  - **Notes docs** capture hard-won lessons — read them when entering the matching scenario, and update them when you learn something non-obvious that would save a future session time:
+    - `docs/notes-on-google-docs.md` — touching Docs DOM, Version History, showrevision network requests, Closure-Library behavior.
+    - `docs/notes-on-testing.md` — writing or debugging the Playwright test suite.
+    - `docs/notes-on-ui-debugging.md` — one-off Playwright+CDP debug scripts (extension reload, DOM probing, style source lookup).
 - **Commit Preparation**:
   - Ensure `README.md` is updated if setup, commands, or user-visible features change.
   - Include all significant changes in the commit message.
@@ -39,3 +43,6 @@ user before elaborating further. Default to action over planning.
 - When the user asks for a change, apply it consistently to ALL similar patterns.
 - Do NOT drop or overwrite existing content in files like README.md — preserve what's there and add to it.
 - When similar logic occurs on multiple parallel paths, use common helper methods when possible, to ensure the logic stays consistent.
+
+## Temp files and debugging code
+- When writing temp files, including scripts and debugging code, put them in `tmp/`, which is in `.gitignore`.
