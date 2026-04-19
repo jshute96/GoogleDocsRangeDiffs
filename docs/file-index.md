@@ -47,6 +47,8 @@ One-line descriptions of every source file, grouped by directory.
 | `testing/extension/playwright.config.ts` | Playwright config for live tests with extension |
 | `testing/extension/fixtures.ts` | Fixtures: connects via CDP to extension browser, provides service worker |
 | `testing/extension/smoke.spec.ts` | Smoke test: opens a Google Doc with extension, checks injection |
+| `testing/extension/helpers.ts` | Helpers: open doc + VH, range-state reads, click actions, log capture, extension reload |
+| `testing/extension/version-range.spec.ts` | Behavioral tests: init capture, From/To combinations, range reset, dropdown, re-entry |
 | `testing/no-extension/playwright.config.ts` | Playwright config for live tests without extension |
 | `testing/no-extension/fixtures.ts` | Fixtures: connects via CDP to no-extension browser |
 | `testing/no-extension/smoke.spec.ts` | Smoke test: opens a Google Doc without extension as baseline |

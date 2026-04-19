@@ -82,6 +82,39 @@ npm run test:extension       # extension only
 npm run test:no-extension    # no-extension only
 ```
 
+### Extension-suite structure
+
+- `testing/extension/helpers.ts` — reusable pieces: `openDocAndVersionHistory`,
+  `getRangeState`, `expectRange`, `clickFrom` / `clickTo` / `clickListitem`,
+  `switchDropdown`, `exitVersionHistory` / `reenterVersionHistory`,
+  `captureDiffRangeLogs`, `reloadExtension`.
+- `testing/extension/version-range.spec.ts` — behavioral suite for the
+  extension's range UI (init capture, From/To combinations, range reset,
+  dropdown switch, re-entry, URL rewrite correctness).
+
+### Gotchas discovered while writing the suite
+
+- **CDP-opened pages don't have focus.** Before pressing the
+  `Control+Alt+Shift+KeyH` shortcut, call `page.bringToFront()` and
+  click the doc body — otherwise the shortcut doesn't reach Docs'
+  text-event-target iframe handler.
+- **Closure / MDC div-buttons ignore `element.click()`.** The
+  chromecover's back arrow (`.docs-revisions-chromecover-titlebar-button-back`)
+  needs a real click via Playwright — use
+  `page.locator(...).click()` or `page.$(sel).click()`.
+- **Extension reload is required** after `npm run build`. Use
+  `reloadExtension(context)` (drives chrome://extensions' reload
+  button via its shadow DOM). `pretest` rebuilds `dist/` but Chrome
+  doesn't pick it up automatically.
+- **Item 0 (the SelectedTile on open) can't be clicked to trigger a
+  showrevision** — Docs treats a click on the already-selected version
+  as a no-op. Tests that need item 0's natural range should read it
+  from the init-capture's `orig request` log line instead of clicking.
+- **Dropdown switch doesn't always land on index 0.** Docs picks
+  whichever version in the new list matches the currently-viewed
+  version (or the default for that view). Assert "some item is
+  selected and From/To are on it" rather than "item 0".
+
 ### Test fixtures
 
 The fixtures in `testing/extension/fixtures.ts` and

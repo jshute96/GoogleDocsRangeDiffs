@@ -4,21 +4,16 @@
  */
 
 import { test, expect } from './fixtures';
+import { openDocAndVersionHistory } from './helpers';
 
 test('extension injects revision UI into version history', async ({ context, testDocUrl }) => {
-  const page = await context.newPage();
-  await page.goto(testDocUrl, { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(5000);
-
-  // Open version history
-  await page.keyboard.press('Control+Alt+Shift+KeyH');
-  await page.waitForTimeout(5000);
-
-  // Each version entry should get From/To buttons injected by the extension
-  const fromButtons = page.locator('.dr-version-from-btn');
-  const toButtons = page.locator('.dr-version-to-btn');
-  expect(await fromButtons.count()).toBeGreaterThan(0);
-  expect(await toButtons.count()).toBeGreaterThan(0);
-
-  await page.close();
+  const page = await openDocAndVersionHistory(context, testDocUrl);
+  try {
+    const fromButtons = page.locator('.dr-version-from-btn');
+    const toButtons = page.locator('.dr-version-to-btn');
+    expect(await fromButtons.count()).toBeGreaterThan(0);
+    expect(await toButtons.count()).toBeGreaterThan(0);
+  } finally {
+    await page.close();
+  }
 });
