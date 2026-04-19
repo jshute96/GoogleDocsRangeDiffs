@@ -48,8 +48,40 @@ Each `[role="listitem"]` is a Material card (`__primary-action` div) with:
 - `jsaction="click:h5M12e;..."` — Google's Closure Library event delegation
 - `jscontroller="KRZHBd"` — Closure controller
 - A "More actions" menu button (child `<button>`)
-- A rename text field (`<textarea>`, for named versions)
+- A rename `<textarea>` labelled `aria-label="Name this version"` — present
+  on **every** listitem (not just named ones), always visible. Clicking the
+  date/label area targets this textarea.
 - Expand arrow for detailed sub-versions
+
+### Selection state
+
+Docs marks which version is currently displayed via class on the listitem:
+
+- Selected: `DocsSidebarComponentsSelectedTile` + `tabindex="0"`
+- Unselected: `DocsSidebarComponentsUnselectedTile` + `tabindex="-1"`
+
+These classes reflect the Closure controller's internal state — removing the
+class does not trick Docs into treating a click as a fresh selection.
+
+### Clicking the already-selected version is a no-op
+
+Clicking (or programmatically `.click()`-ing) a listitem that's already
+selected does **not** fire a new `showrevision` request. To force Docs to
+refetch for a target range, click a *different* listitem and rewrite the
+resulting URL.
+
+### Label (date) clicks vs body clicks
+
+- **Body click** on a listitem: Docs fires a normal `click` that selects
+  the version and triggers `showrevision`.
+- **Label/date click**: Docs focuses the rename textarea, selects the
+  version, AND triggers `showrevision` — but the `click` event on the
+  listitem appears to be swallowed.
+- A `click`-phase delegation listener on the versions list does NOT see
+  label clicks. A `mousedown` listener (capture phase) does.
+- Prefer `mousedown` for selection-aware logic. Skip only when the
+  textarea is already focused (user is mid-edit), not just because the
+  target is a textarea — every listitem has one.
 
 ### Version type dropdown
 
@@ -93,11 +125,21 @@ We considered two approaches for rewriting `showrevision` URLs:
 
 ### Request details
 
-Google Docs uses **XMLHttpRequest** (not `fetch`) for `showrevision`
-requests (observed April 2026). We patch both as a safety net.
+Google Docs uses both **XMLHttpRequest** and **`fetch`** for `showrevision`
+requests (observed April 2026). Patch both.
+
+- XHR path: hook `XMLHttpRequest.prototype.open`. The `url` argument may
+  be a string or a `URL` — stringify before rewriting.
+- Fetch path: Docs sometimes calls `fetch` with a `Request` object, not
+  just a string. A hook that only handles string inputs will miss these.
+  - Extract the URL from `input` regardless of type (`string`, `URL`,
+    or `Request`).
+  - If rewriting is needed for a `Request`, reconstruct it with the
+    rewritten URL and preserve `method`, `headers`, `credentials`, `mode`,
+    `cache`, `redirect`, `referrer`, `integrity`, `keepalive`.
 
 When the user clicks a version entry, Google Docs fetches the revision diff
-via an XHR to a URL like:
+via a request to a URL like:
 
 ```
 /document/d/{docId}/showrevision?start=355&end=377&id={docId}&smv=...&token=...

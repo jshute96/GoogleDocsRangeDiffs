@@ -59,15 +59,26 @@ function revisionInterceptorFunc(): void {
   // unmodified.
   window.addEventListener('message', (e: MessageEvent) => {
     if (e.source !== window) return;
-    if (e.data && e.data.source === 'diffrange' && e.data.action === 'resetRevisionOverrides') {
+    if (!e.data || e.data.source !== 'diffrange') return;
+    if (e.data.action === 'resetRevisionOverrides') {
       window.__drRevisionStart = undefined;
       window.__drRevisionEnd = undefined;
       console.log('[DiffRange] window overrides cleared');
+    } else if (e.data.action === 'setRevisionOverrides') {
+      window.__drRevisionStart = typeof e.data.start === 'number' ? e.data.start : undefined;
+      window.__drRevisionEnd = typeof e.data.end === 'number' ? e.data.end : undefined;
+      console.log('[DiffRange] window overrides set to ' + window.__drRevisionStart + ':' + window.__drRevisionEnd);
     }
   });
 
   function rewriteRevisionUrl(url: string): string {
     if (url.indexOf('/showrevision?') === -1) return url;
+
+    const origStartStr = url.match(/[?&]start=(\d+)/)?.[1];
+    const origEndStr = url.match(/[?&]end=(\d+)/)?.[1];
+
+    // Track what we captured, if anything: 'from' | 'to' | 'both' | null.
+    let capturedAs: string | null = null;
 
     // Capture mode: when the user clicked "From here" or "To here" on a
     // version, content-revisions.ts sets document.body.dataset.drCaptureMode
@@ -76,10 +87,8 @@ function revisionInterceptorFunc(): void {
     // accordingly, then update which version's buttons are highlighted.
     const captureMode = document.body?.dataset.drCaptureMode;
     if (captureMode) {
-      const origStartMatch = url.match(/[?&]start=(\d+)/);
-      const origEndMatch = url.match(/[?&]end=(\d+)/);
-      const origStart = origStartMatch ? parseInt(origStartMatch[1], 10) : null;
-      const origEnd = origEndMatch ? parseInt(origEndMatch[1], 10) : null;
+      const origStart = origStartStr ? parseInt(origStartStr, 10) : null;
+      const origEnd = origEndStr ? parseInt(origEndStr, 10) : null;
 
       if (origStart !== null && origEnd !== null) {
         let newStart: number | null = window.__drRevisionStart ?? null;
@@ -115,6 +124,13 @@ function revisionInterceptorFunc(): void {
         // Update which version's From/To buttons are highlighted
         const pending = document.querySelector('.dr-pending-capture');
         if (pending) {
+          // Cache this listitem's "natural" (unrewritten) range on the element
+          // itself. Used later if the user clicks From/To on this version when
+          // it's already selected — Docs won't fire a new showrevision in that
+          // case, so we fall back to this cached range.
+          (pending as HTMLElement).dataset.drNaturalStart = String(origStart);
+          (pending as HTMLElement).dataset.drNaturalEnd = String(origEnd);
+
           const clearAndHighlight = (btnClass: string, listitem: Element): void => {
             const all = document.querySelectorAll('.' + btnClass);
             for (let i = 0; i < all.length; i++) all[i].classList.remove('dr-btn-highlighted');
@@ -131,7 +147,7 @@ function revisionInterceptorFunc(): void {
           updateInBetweenHighlights();
         }
 
-        console.log('[DiffRange] orig request: ' + origStart + ' to ' + origEnd + ' (capturing ' + (tookBoth ? 'both' : captureMode) + ')');
+        capturedAs = tookBoth ? 'both' : captureMode;
       }
 
       // Consume the capture flag — only one URL rewrite per button click
@@ -147,22 +163,31 @@ function revisionInterceptorFunc(): void {
     if (!startVal && window.__drRevisionStart != null) startVal = String(window.__drRevisionStart);
     if (!endVal && window.__drRevisionEnd != null) endVal = String(window.__drRevisionEnd);
 
-    if (!startVal && !endVal) return url;
-
-    const origStart = url.match(/[?&]start=(\d+)/)?.[1];
-    const origEnd = url.match(/[?&]end=(\d+)/)?.[1];
-
-    if (startVal && /^\d+$/.test(startVal)) {
-      url = url.replace(/([?&])start=\d+/, '$1start=' + startVal);
+    // Log: always "orig request" if we're handling (either captured or have
+    // overrides to apply), otherwise "unhandled".
+    const os = origStartStr ?? '?';
+    const oe = origEndStr ?? '?';
+    if (capturedAs) {
+      console.log('[DiffRange] orig request: ' + os + ' to ' + oe + ' (capturing ' + capturedAs + ')');
+    } else if (startVal || endVal) {
+      console.log('[DiffRange] orig request: ' + os + ' to ' + oe + ' (capturing neither)');
+    } else {
+      console.log('[DiffRange] unhandled: ' + os + ' to ' + oe);
     }
-    if (endVal && /^\d+$/.test(endVal)) {
-      url = url.replace(/([?&])end=\d+/, '$1end=' + endVal);
-    }
 
-    const newStart = url.match(/[?&]start=(\d+)/)?.[1];
-    const newEnd = url.match(/[?&]end=(\d+)/)?.[1];
-    if (origStart !== newStart || origEnd !== newEnd) {
-      console.log('[DiffRange] rewrote to: ' + newStart + ' to ' + newEnd);
+    if (startVal || endVal) {
+      if (startVal && /^\d+$/.test(startVal)) {
+        url = url.replace(/([?&])start=\d+/, '$1start=' + startVal);
+      }
+      if (endVal && /^\d+$/.test(endVal)) {
+        url = url.replace(/([?&])end=\d+/, '$1end=' + endVal);
+      }
+
+      const newStart = url.match(/[?&]start=(\d+)/)?.[1];
+      const newEnd = url.match(/[?&]end=(\d+)/)?.[1];
+      if (origStartStr !== newStart || origEndStr !== newEnd) {
+        console.log('[DiffRange] rewrote to: ' + newStart + ' to ' + newEnd);
+      }
     }
 
     return url;
@@ -188,11 +213,40 @@ function revisionInterceptorFunc(): void {
 
   const origFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> = window.fetch;
   window.fetch = function(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    if (typeof input === 'string') {
-      const rewritten = rewriteRevisionUrl(input);
-      return origFetch.call(this, rewritten, init);
+    // Extract URL regardless of input type (string, URL, or Request) so that
+    // rewriteRevisionUrl runs for every showrevision regardless of how Docs
+    // invokes fetch — otherwise Request-object calls bypass our interceptor.
+    let urlStr: string | null = null;
+    if (typeof input === 'string') urlStr = input;
+    else if (input instanceof URL) urlStr = input.toString();
+    else if (input && typeof (input as Request).url === 'string') urlStr = (input as Request).url;
+
+    if (urlStr) {
+      const rewritten = rewriteRevisionUrl(urlStr);
+      if (rewritten !== urlStr) {
+        if (typeof input === 'string' || input instanceof URL) {
+          return origFetch.call(this, rewritten, init);
+        }
+        // Reconstruct Request with the rewritten URL. showrevision is GET, so
+        // no body to preserve. signal propagates aborts; referrerPolicy is
+        // separate from referrer.
+        const r = input as Request;
+        return origFetch.call(this, new Request(rewritten, {
+          method: r.method,
+          headers: r.headers,
+          credentials: r.credentials,
+          mode: r.mode,
+          cache: r.cache,
+          redirect: r.redirect,
+          referrer: r.referrer,
+          referrerPolicy: r.referrerPolicy,
+          integrity: r.integrity,
+          keepalive: r.keepalive,
+          signal: r.signal,
+        }), init);
+      }
     }
-    return origFetch.call(this, input, init);
+    return origFetch.call(this, input as RequestInfo, init);
   };
 
   // Open Version History if it isn't already open. Google Docs listens for

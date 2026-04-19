@@ -156,6 +156,7 @@
         b.addEventListener('mouseup', suppress);
         b.addEventListener('click', (e: Event) => {
           e.stopPropagation();
+          if (isSelected(item) && captureForSelected(item, mode)) return;
           // Cancel any stale capture from a previous click that never produced
           // a showrevision request — otherwise the interceptor could associate
           // a later request with the wrong item.
@@ -186,6 +187,108 @@
     // Re-apply in-between highlights to any newly-added items (e.g., when the
     // user expands a version's detailed sub-versions, new listitems appear).
     updateInBetweenHighlights();
+  }
+
+  // True when Docs has marked this listitem as the currently-displayed
+  // version. Docs makes a click on the already-selected item a no-op, so we
+  // need special handling when From/To is clicked on it.
+  function isSelected(item: Element): boolean {
+    const c = item.className || '';
+    return c.indexOf('SelectedTile') !== -1 && c.indexOf('UnselectedTile') === -1;
+  }
+
+  // Handle a From/To click on the already-selected version. Docs won't fire a
+  // new showrevision for it, so we can't capture via the normal flow. Instead:
+  //  1. Use the natural start/end cached on this item by a prior capture.
+  //  2. Compute the new range from mode + current input values (same logic as
+  //     the MAIN-world capture branch).
+  //  3. Update input fields, highlights, and window overrides directly.
+  //  4. Click a neighbor listitem (with drSuppressCapture) to force a
+  //     showrevision that the interceptor rewrites to the new range.
+  // Returns true if handled; false if the caller should fall back to the
+  // normal capture path (e.g. no cached natural range yet).
+  function captureForSelected(item: Element, mode: string): boolean {
+    const natStart = (item as HTMLElement).dataset.drNaturalStart;
+    const natEnd = (item as HTMLElement).dataset.drNaturalEnd;
+    if (!natStart || !natEnd) return false;
+    const ns = parseInt(natStart, 10);
+    const ne = parseInt(natEnd, 10);
+    if (!Number.isFinite(ns) || !Number.isFinite(ne)) return false;
+
+    const startInput = document.getElementById('dr-revision-start') as HTMLInputElement | null;
+    const endInput = document.getElementById('dr-revision-end') as HTMLInputElement | null;
+    const curStart = startInput && startInput.value.trim() ? parseInt(startInput.value, 10) : null;
+    const curEnd = endInput && endInput.value.trim() ? parseInt(endInput.value, 10) : null;
+
+    let newStart = curStart;
+    let newEnd = curEnd;
+    let tookBoth = false;
+    if (mode === 'from') {
+      newStart = ns;
+      if (newEnd == null || newStart >= newEnd) { newEnd = ne; tookBoth = true; }
+    } else if (mode === 'to') {
+      newEnd = ne;
+      if (newStart == null || newStart >= newEnd) { newStart = ns; tookBoth = true; }
+    } else if (mode === 'both') {
+      newStart = ns;
+      newEnd = ne;
+      tookBoth = true;
+    }
+    if (newStart == null || newEnd == null) return false;
+
+    const thisFromHi = !!item.querySelector('.dr-version-from-btn.dr-btn-highlighted');
+    const thisToHi = !!item.querySelector('.dr-version-to-btn.dr-btn-highlighted');
+    const expectFromHi = mode === 'from' || tookBoth;
+    const expectToHi = mode === 'to' || tookBoth;
+    const rangeChanged = curStart !== newStart || curEnd !== newEnd;
+    const highlightsOk = (!expectFromHi || thisFromHi) && (!expectToHi || thisToHi);
+
+    // Full no-op: nothing to do.
+    if (!rangeChanged && highlightsOk) return true;
+
+    const clearAndHighlight = (btnClass: string): void => {
+      const all = document.querySelectorAll('.' + btnClass);
+      for (let i = 0; i < all.length; i++) all[i].classList.remove('dr-btn-highlighted');
+      const btn = item.querySelector('.' + btnClass);
+      if (btn) btn.classList.add('dr-btn-highlighted');
+    };
+
+    // If only highlights differ (same range), fix highlights — no fetch needed.
+    if (!rangeChanged) {
+      if (mode === 'from' || tookBoth) clearAndHighlight('dr-version-from-btn');
+      if (mode === 'to' || tookBoth) clearAndHighlight('dr-version-to-btn');
+      updateInBetweenHighlights();
+      return true;
+    }
+
+    // Range is changing — need a fresh showrevision via a neighbor click.
+    // Find the neighbor first so we don't half-update state if none exists.
+    const all = document.querySelectorAll('[aria-label="Versions"] [role="listitem"]');
+    let neighbor: HTMLElement | null = null;
+    for (let i = 0; i < all.length; i++) {
+      if (all[i] !== item) { neighbor = all[i] as HTMLElement; break; }
+    }
+    if (!neighbor) return false;
+
+    if (startInput) { startInput.value = String(newStart); startInput.dispatchEvent(new Event('input', { bubbles: true })); }
+    if (endInput) { endInput.value = String(newEnd); endInput.dispatchEvent(new Event('input', { bubbles: true })); }
+
+    if (mode === 'from' || tookBoth) clearAndHighlight('dr-version-from-btn');
+    if (mode === 'to' || tookBoth) clearAndHighlight('dr-version-to-btn');
+    updateInBetweenHighlights();
+
+    window.postMessage({
+      source: 'diffrange', action: 'setRevisionOverrides',
+      start: newStart, end: newEnd,
+    }, '*');
+
+    document.body.dataset.drSuppressCapture = '1';
+    try {
+      neighbor.click();
+    } finally {
+      delete document.body.dataset.drSuppressCapture;
+    }
+    return true;
   }
 
   // Add the .dr-btn-in-between class to From/To buttons on every version
@@ -251,23 +354,44 @@
     }, true);
   }
 
-  // Set up a delegated capture-phase click listener on the versions list so
-  // that clicking a version directly (not via our From/To buttons) is treated
-  // as capturing both bounds from that version. Runs in capture phase so it
-  // fires before Google's own click handler. Idempotent — only attaches once
-  // per versions list element.
+  // Set up a delegated capture-phase mousedown listener on the versions list
+  // so that pressing on a version directly (not via our From/To buttons) is
+  // treated as capturing both bounds. We listen on mousedown rather than
+  // click because clicking a version's date label opens the rename textarea
+  // and Docs appears to swallow the subsequent click, so a click listener
+  // would miss it. mousedown fires before Docs processes the press.
+  // Idempotent — only attaches once per versions list element.
   function setupVersionListListener(): void {
     const list = document.querySelector('[aria-label="Versions"]') as HTMLElement | null;
     if (!list || list.dataset.drListenerAttached) return;
     list.dataset.drListenerAttached = '1';
-    list.addEventListener('click', (e: Event) => {
-      // Skip clicks on buttons (more-actions menu) or textareas (rename).
-      if ((e.target as Element).closest('button') || (e.target as Element).closest('textarea')) return;
-      // Skip programmatic clicks from View diff / From / To button handlers —
-      // they've already set up the correct capture state themselves.
+    list.addEventListener('mousedown', (e: Event) => {
+      // Skip presses on the more-actions / jump-to buttons.
+      if ((e.target as Element).closest('button')) return;
+      // Every listitem contains a rename textarea ("Name this version"), so
+      // we can't skip based on "target is a textarea" — that would miss the
+      // label click Docs treats as selecting the version. Only skip when the
+      // textarea is already focused (user is actively editing the name).
+      const ta = (e.target as Element).closest('textarea');
+      if (ta && document.activeElement === ta) return;
+      // Skip programmatic events from View diff / From / To button handlers —
+      // they've already set up the correct capture state themselves. (Note:
+      // .click() doesn't dispatch mousedown, so this mostly guards against
+      // future synthetic mousedown dispatches.)
       if (document.body.dataset.drSuppressCapture) return;
       const item = (e.target as Element).closest('[role="listitem"]');
       if (!item) return;
+      // If the user pressed on the already-selected version, Docs won't fire
+      // a new showrevision — use the neighbor-click trick to apply the range.
+      if (isSelected(item) && captureForSelected(item, 'both')) {
+        // Don't block mousedown when the target is a textarea — we want Docs
+        // to still focus it so the user can edit the rename.
+        if (!ta) {
+          e.stopPropagation();
+          e.preventDefault();
+        }
+        return;
+      }
       // Always cancel any stale capture and set up a fresh one for this click.
       // A previous click may have set drCaptureMode without producing a
       // showrevision request (e.g. clicking the already-active version), and
