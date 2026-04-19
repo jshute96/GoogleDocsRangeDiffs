@@ -131,7 +131,7 @@ function revisionInterceptorFunc(): void {
           updateInBetweenHighlights();
         }
 
-        console.log('[DiffRange] capture ' + captureMode + ': start=' + newStart + ' end=' + newEnd + (tookBoth ? ' (took both)' : ''));
+        console.log('[DiffRange] orig request: ' + origStart + ' to ' + origEnd + ' (capturing ' + (tookBoth ? 'both' : captureMode) + ')');
       }
 
       // Consume the capture flag — only one URL rewrite per button click
@@ -149,11 +149,20 @@ function revisionInterceptorFunc(): void {
 
     if (!startVal && !endVal) return url;
 
+    const origStart = url.match(/[?&]start=(\d+)/)?.[1];
+    const origEnd = url.match(/[?&]end=(\d+)/)?.[1];
+
     if (startVal && /^\d+$/.test(startVal)) {
       url = url.replace(/([?&])start=\d+/, '$1start=' + startVal);
     }
     if (endVal && /^\d+$/.test(endVal)) {
       url = url.replace(/([?&])end=\d+/, '$1end=' + endVal);
+    }
+
+    const newStart = url.match(/[?&]start=(\d+)/)?.[1];
+    const newEnd = url.match(/[?&]end=(\d+)/)?.[1];
+    if (origStart !== newStart || origEnd !== newEnd) {
+      console.log('[DiffRange] rewrote to: ' + newStart + ' to ' + newEnd);
     }
 
     return url;
@@ -174,9 +183,6 @@ function revisionInterceptorFunc(): void {
   ): void {
     const urlStr = typeof url === 'string' ? url : url.toString();
     const rewritten = rewriteRevisionUrl(urlStr);
-    if (rewritten !== urlStr) {
-      console.log('[DiffRange] revision override: rewriting XHR', urlStr.substring(0, 80), '→ start/end overridden');
-    }
     origXHROpen.call(this, method, rewritten, async_, username, password);
   };
 
@@ -184,9 +190,6 @@ function revisionInterceptorFunc(): void {
   window.fetch = function(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     if (typeof input === 'string') {
       const rewritten = rewriteRevisionUrl(input);
-      if (rewritten !== input) {
-        console.log('[DiffRange] revision override: rewriting fetch', input.substring(0, 80), '→ start/end overridden');
-      }
       return origFetch.call(this, rewritten, init);
     }
     return origFetch.call(this, input, init);

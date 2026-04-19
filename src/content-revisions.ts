@@ -87,13 +87,22 @@
       if (btn.disabled) return;
       // Click the first version listitem to trigger a showrevision request.
       // The interceptor will rewrite start/end from the input fields.
-      // Set drSuppressCapture so the version-list click delegation doesn't
-      // mistakenly mark this as a 'both' capture from that version.
       const firstItem = document.querySelector('[aria-label="Versions"] [role="listitem"]') as HTMLElement | null;
       if (firstItem) {
+        // Cancel any stale capture from a previous From/To click that never
+        // produced a request — otherwise the interceptor would see the stale
+        // mode and overwrite the user's input values during our rewrite.
+        const stalePending = document.querySelector('.dr-pending-capture');
+        if (stalePending) stalePending.classList.remove('dr-pending-capture');
+        delete document.body.dataset.drCaptureMode;
+        // Suppress the version-list click delegation during our programmatic
+        // click so it doesn't treat this as a 'both' capture from firstItem.
         document.body.dataset.drSuppressCapture = '1';
-        firstItem.click();
-        delete document.body.dataset.drSuppressCapture;
+        try {
+          firstItem.click();
+        } finally {
+          delete document.body.dataset.drSuppressCapture;
+        }
         console.log('[DiffRange] View diff: triggered version click with overrides');
       }
     });
@@ -147,12 +156,21 @@
         b.addEventListener('mouseup', suppress);
         b.addEventListener('click', (e: Event) => {
           e.stopPropagation();
-          // Clear any old pending marker from a previous click
+          // Cancel any stale capture from a previous click that never produced
+          // a showrevision request — otherwise the interceptor could associate
+          // a later request with the wrong item.
           const oldPending = document.querySelector('.dr-pending-capture');
           if (oldPending) oldPending.classList.remove('dr-pending-capture');
           item.classList.add('dr-pending-capture');
           document.body.dataset.drCaptureMode = mode;
-          (item as HTMLElement).click();
+          // Suppress the version-list delegation during our programmatic click
+          // so it doesn't clobber the mode we just set.
+          document.body.dataset.drSuppressCapture = '1';
+          try {
+            (item as HTMLElement).click();
+          } finally {
+            delete document.body.dataset.drSuppressCapture;
+          }
         });
         return b;
       }
@@ -244,13 +262,16 @@
     list.dataset.drListenerAttached = '1';
     list.addEventListener('click', (e: Event) => {
       // Skip clicks on buttons (more-actions menu) or textareas (rename).
-      // From/To button clicks are handled by the drCaptureMode check below —
-      // they set the flag before programmatically calling item.click().
       if ((e.target as Element).closest('button') || (e.target as Element).closest('textarea')) return;
-      // Skip if View diff or a From/To button already set the mode
-      if (document.body.dataset.drCaptureMode || document.body.dataset.drSuppressCapture) return;
+      // Skip programmatic clicks from View diff / From / To button handlers —
+      // they've already set up the correct capture state themselves.
+      if (document.body.dataset.drSuppressCapture) return;
       const item = (e.target as Element).closest('[role="listitem"]');
       if (!item) return;
+      // Always cancel any stale capture and set up a fresh one for this click.
+      // A previous click may have set drCaptureMode without producing a
+      // showrevision request (e.g. clicking the already-active version), and
+      // we don't want the current request to be associated with that stale item.
       const oldPending = document.querySelector('.dr-pending-capture');
       if (oldPending) oldPending.classList.remove('dr-pending-capture');
       item.classList.add('dr-pending-capture');
