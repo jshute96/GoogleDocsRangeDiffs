@@ -14,13 +14,7 @@ test('extension injects revision UI into version history', async ({ context, tes
   await page.keyboard.press('Control+Alt+Shift+KeyH');
   await page.waitForTimeout(5000);
 
-  // The extension should inject the revision override controls
-  await expect(page.locator('#dr-revision-overrides')).toBeVisible();
-  await expect(page.locator('#dr-revision-start')).toBeVisible();
-  await expect(page.locator('#dr-revision-end')).toBeVisible();
-  await expect(page.locator('#dr-revision-view-diff')).toBeVisible();
-
-  // Each version entry should get From/To buttons
+  // Each version entry should get From/To buttons injected by the extension
   const fromButtons = page.locator('.dr-version-from-btn');
   const toButtons = page.locator('.dr-version-to-btn');
   expect(await fromButtons.count()).toBeGreaterThan(0);

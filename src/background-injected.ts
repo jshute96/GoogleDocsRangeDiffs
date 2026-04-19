@@ -4,25 +4,21 @@
 // read Closure Library internals, but cannot use chrome.* APIs.
 
 // Monkey-patches XMLHttpRequest.open and fetch to rewrite start/end
-// parameters on showrevision URLs. Reads override values from:
-//   1. The #dr-revision-start / #dr-revision-end input fields (UI)
-//   2. window.__drRevisionStart / window.__drRevisionEnd (programmatic API)
-// Also exposes window.showRevisions(start, end) as a console-callable
-// debug method that sets overrides and opens/refreshes Version History.
+// parameters on showrevision URLs. Override values live on
+// window.__drRevisionStart / window.__drRevisionEnd (canonical) and are
+// mirrored to document.body.dataset.drOverrideStart/End so the content
+// script (ISOLATED world) can read them. Also exposes
+// window.showRevisions(start, end) as a console-callable debug method.
 function revisionInterceptorFunc(): void {
-  // Update the Start/End revision UI inputs to reflect the current overrides.
-  // Dispatches an input event so the View diff button updates its enabled state.
-  function syncInputsFromOverrides(): void {
-    const startInput = document.getElementById('dr-revision-start') as HTMLInputElement | null;
-    const endInput = document.getElementById('dr-revision-end') as HTMLInputElement | null;
-    if (startInput && window.__drRevisionStart != null) {
-      startInput.value = String(window.__drRevisionStart);
-      startInput.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-    if (endInput && window.__drRevisionEnd != null) {
-      endInput.value = String(window.__drRevisionEnd);
-      endInput.dispatchEvent(new Event('input', { bubbles: true }));
-    }
+  // Set the canonical overrides and mirror them to the dataset so the
+  // content-script world can read the current values.
+  function setOverrides(start: number | undefined, end: number | undefined): void {
+    window.__drRevisionStart = start;
+    window.__drRevisionEnd = end;
+    if (start != null) document.body.dataset.drOverrideStart = String(start);
+    else delete document.body.dataset.drOverrideStart;
+    if (end != null) document.body.dataset.drOverrideEnd = String(end);
+    else delete document.body.dataset.drOverrideEnd;
   }
 
   // Add the .dr-btn-in-between class to From/To buttons on every version
@@ -61,13 +57,13 @@ function revisionInterceptorFunc(): void {
     if (e.source !== window) return;
     if (!e.data || e.data.source !== 'diffrange') return;
     if (e.data.action === 'resetRevisionOverrides') {
-      window.__drRevisionStart = undefined;
-      window.__drRevisionEnd = undefined;
+      setOverrides(undefined, undefined);
       console.log('[DiffRange] window overrides cleared');
     } else if (e.data.action === 'setRevisionOverrides') {
-      window.__drRevisionStart = typeof e.data.start === 'number' ? e.data.start : undefined;
-      window.__drRevisionEnd = typeof e.data.end === 'number' ? e.data.end : undefined;
-      console.log('[DiffRange] window overrides set to ' + window.__drRevisionStart + ':' + window.__drRevisionEnd);
+      const s = typeof e.data.start === 'number' ? e.data.start : undefined;
+      const en = typeof e.data.end === 'number' ? e.data.end : undefined;
+      setOverrides(s, en);
+      console.log('[DiffRange] window overrides set to ' + s + ':' + en);
     }
   });
 
@@ -145,9 +141,7 @@ function revisionInterceptorFunc(): void {
           tookBoth = true;
         }
 
-        window.__drRevisionStart = newStart ?? undefined;
-        window.__drRevisionEnd = newEnd ?? undefined;
-        syncInputsFromOverrides();
+        setOverrides(newStart ?? undefined, newEnd ?? undefined);
 
         // Update which version's From/To buttons are highlighted
         const pending = document.querySelector('.dr-pending-capture');
@@ -195,14 +189,8 @@ function revisionInterceptorFunc(): void {
       delete document.body.dataset.drCaptureMode;
     }
 
-    const startInput = document.getElementById('dr-revision-start') as HTMLInputElement | null;
-    const endInput = document.getElementById('dr-revision-end') as HTMLInputElement | null;
-    let startVal = startInput ? startInput.value.trim() : '';
-    let endVal = endInput ? endInput.value.trim() : '';
-
-    // Fall back to window-level overrides (set by showRevisions() or capture)
-    if (!startVal && window.__drRevisionStart != null) startVal = String(window.__drRevisionStart);
-    if (!endVal && window.__drRevisionEnd != null) endVal = String(window.__drRevisionEnd);
+    const startVal = window.__drRevisionStart != null ? String(window.__drRevisionStart) : '';
+    const endVal = window.__drRevisionEnd != null ? String(window.__drRevisionEnd) : '';
 
     // Log: always "orig request" if we're handling (either captured or have
     // overrides to apply), otherwise "unhandled".
@@ -318,14 +306,7 @@ function revisionInterceptorFunc(): void {
   // Debug method: showRevisions(start, end) — callable from the browser console.
   // Sets the revision range overrides and opens/refreshes Version History.
   window.showRevisions = function(start: number, end: number): void {
-    window.__drRevisionStart = start;
-    window.__drRevisionEnd = end;
-
-    // Also populate the UI inputs if they exist
-    const startInput = document.getElementById('dr-revision-start') as HTMLInputElement | null;
-    const endInput = document.getElementById('dr-revision-end') as HTMLInputElement | null;
-    if (startInput) { startInput.value = String(start); startInput.dispatchEvent(new Event('input', { bubbles: true })); }
-    if (endInput) { endInput.value = String(end); endInput.dispatchEvent(new Event('input', { bubbles: true })); }
+    setOverrides(start, end);
 
     // If Version History is already open (or was opened once this session,
     // which leaves the DOM in place), click a listitem to trigger a new fetch.

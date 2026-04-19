@@ -1,118 +1,21 @@
 // Revision override UI for Google Docs Version History panel.
 //
-// Injects "Start revision" and "End revision" text fields into the
-// Version History sidebar. When populated, these override the start/end
-// parameters in showrevision network requests, allowing you to fetch
-// arbitrary revision ranges.
-//
-// Also injects "From here" / "To here" buttons on each version listitem,
-// allowing users to pick range endpoints by clicking versions rather than
-// typing revision numbers. Selected endpoints highlight in solid blue;
-// versions between them highlight in light blue.
+// Injects "From here" / "To here" buttons on each version listitem. Users
+// pick range endpoints by clicking versions; the MAIN-world interceptor
+// rewrites the resulting showrevision URL to the chosen range. Selected
+// endpoints highlight in solid blue; versions between them highlight in
+// light blue.
 //
 // The fetch/XHR interception runs in the MAIN world (same JS context as
-// the page) so it can monkey-patch the page's own network calls. The UI
-// injection runs in the content script world but writes to the shared DOM,
-// which the MAIN world interceptor reads from.
+// the page) so it can monkey-patch the page's own network calls. This
+// content script writes to the shared DOM, which the MAIN world reads
+// from. Current overrides live on window.__drRevisionStart/End (owned by
+// MAIN) and are mirrored to document.body.dataset.drOverrideStart/End so
+// this world can read them.
 
 (function() {
   // Only run on Google Docs document pages
   if (!location.pathname.match(/\/document\/d\//)) return;
-
-  // Inject the revision override text fields into the Version History panel.
-  // Called by a MutationObserver watching for the sidebar to appear.
-  function injectRevisionOverrides(): void {
-    const sidebarContent = document.querySelector('.DocsSidebarComponentsSidebarContent');
-    if (!sidebarContent) return;
-
-    const versionsList = document.querySelector('[aria-label="Versions"]');
-    if (!versionsList) return;
-
-    // Don't double-inject
-    if (document.getElementById('dr-revision-overrides')) return;
-
-    const scrollable = sidebarContent.querySelector('.DocsSidebarComponentsScrollableContentContainer');
-    if (!scrollable) return;
-
-    const container = document.createElement('div');
-    container.id = 'dr-revision-overrides';
-    container.style.cssText = 'padding:8px 16px;display:flex;gap:8px;align-items:center;font-family:Google Sans,Roboto,sans-serif;font-size:12px;color:#5f6368;border-bottom:1px solid #e0e0e0;';
-
-    function makeField(label: string, id: string): HTMLDivElement {
-      const wrapper = document.createElement('div');
-      wrapper.style.cssText = 'display:flex;flex-direction:column;flex:1;';
-      const lbl = document.createElement('label');
-      lbl.textContent = label;
-      lbl.setAttribute('for', id);
-      lbl.style.cssText = 'font-size:10px;color:#5f6368;margin-bottom:2px;';
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.id = id;
-      input.style.cssText = 'width:100%;box-sizing:border-box;padding:4px 6px;border:1px solid #dadce0;border-radius:4px;font-size:12px;outline:none;';
-      input.addEventListener('focus', () => { input.style.borderColor = '#1a73e8'; });
-      input.addEventListener('blur', () => { input.style.borderColor = '#dadce0'; });
-      wrapper.appendChild(lbl);
-      wrapper.appendChild(input);
-      return wrapper;
-    }
-
-    container.appendChild(makeField('Start revision', 'dr-revision-start'));
-    container.appendChild(makeField('End revision', 'dr-revision-end'));
-
-    // "View diff" button — triggers a version click with the overridden start/end.
-    const btnWrapper = document.createElement('div');
-    btnWrapper.style.cssText = 'display:flex;flex-direction:column;justify-content:flex-end;flex-shrink:0;';
-    const btn = document.createElement('button');
-    btn.id = 'dr-revision-view-diff';
-    btn.textContent = 'View diff';
-    btn.disabled = true;
-    btn.style.cssText = 'padding:4px 12px;border:1px solid #dadce0;border-radius:4px;font-size:12px;font-family:Google Sans,Roboto,sans-serif;background:#fff;color:#5f6368;cursor:default;opacity:0.5;white-space:nowrap;';
-
-    function updateButtonState(): void {
-      const startVal = (document.getElementById('dr-revision-start') as HTMLInputElement).value.trim();
-      const endVal = (document.getElementById('dr-revision-end') as HTMLInputElement).value.trim();
-      const active = startVal !== '' && endVal !== '' && /^\d+$/.test(startVal) && /^\d+$/.test(endVal);
-      btn.disabled = !active;
-      btn.style.opacity = active ? '1' : '0.5';
-      btn.style.cursor = active ? 'pointer' : 'default';
-      btn.style.background = active ? '#1a73e8' : '#fff';
-      btn.style.color = active ? '#fff' : '#5f6368';
-      btn.style.borderColor = active ? '#1a73e8' : '#dadce0';
-    }
-
-    (container.querySelector('#dr-revision-start') as HTMLInputElement).addEventListener('input', updateButtonState);
-    (container.querySelector('#dr-revision-end') as HTMLInputElement).addEventListener('input', updateButtonState);
-
-    btn.addEventListener('click', () => {
-      if (btn.disabled) return;
-      // Click the first version listitem to trigger a showrevision request.
-      // The interceptor will rewrite start/end from the input fields.
-      const firstItem = document.querySelector('[aria-label="Versions"] [role="listitem"]') as HTMLElement | null;
-      if (firstItem) {
-        // Cancel any stale capture from a previous From/To click that never
-        // produced a request — otherwise the interceptor would see the stale
-        // mode and overwrite the user's input values during our rewrite.
-        const stalePending = document.querySelector('.dr-pending-capture');
-        if (stalePending) stalePending.classList.remove('dr-pending-capture');
-        delete document.body.dataset.drCaptureMode;
-        // Suppress the version-list click delegation during our programmatic
-        // click so it doesn't treat this as a 'both' capture from firstItem.
-        document.body.dataset.drSuppressCapture = '1';
-        try {
-          firstItem.click();
-        } finally {
-          delete document.body.dataset.drSuppressCapture;
-        }
-        console.log('[DiffRange] View diff: triggered version click with overrides');
-      }
-    });
-
-    btnWrapper.appendChild(btn);
-    container.appendChild(btnWrapper);
-
-    sidebarContent.insertBefore(container, scrollable);
-    console.log('[DiffRange] revision override fields injected');
-  }
 
   // Inject "From here" / "To here" buttons into each version listitem.
   // Clicking a button:
@@ -122,7 +25,8 @@
   //   3. Triggers the listitem's normal click → fires a showrevision request
   //   4. The MAIN world interceptor reads the capture mode, parses the URL's
   //      original start/end, updates window.__drRevisionStart/__drRevisionEnd
-  //      and the UI inputs, and toggles the .dr-btn-highlighted class on the
+  //      (mirrored to document.body.dataset.drOverrideStart/End so this world
+  //      can read the current values), and toggles .dr-btn-highlighted on the
   //      from/to button(s) of the captured listitem.
   function injectVersionButtons(): void {
     // Inject the highlight stylesheet once per page
@@ -213,9 +117,9 @@
   // Handle a From/To click on the already-selected version. Docs won't fire a
   // new showrevision for it, so we can't capture via the normal flow. Instead:
   //  1. Use the natural start/end cached on this item by a prior capture.
-  //  2. Compute the new range from mode + current input values (same logic as
-  //     the MAIN-world capture branch).
-  //  3. Update input fields, highlights, and window overrides directly.
+  //  2. Compute the new range from mode + current override values (same logic
+  //     as the MAIN-world capture branch).
+  //  3. Update highlights and window overrides directly.
   //  4. Click a neighbor listitem (with drSuppressCapture) to force a
   //     showrevision that the interceptor rewrites to the new range.
   // Returns true if handled; false if the caller should fall back to the
@@ -228,10 +132,12 @@
     const ne = parseInt(natEnd, 10);
     if (!Number.isFinite(ns) || !Number.isFinite(ne)) return false;
 
-    const startInput = document.getElementById('dr-revision-start') as HTMLInputElement | null;
-    const endInput = document.getElementById('dr-revision-end') as HTMLInputElement | null;
-    const curStart = startInput && startInput.value.trim() ? parseInt(startInput.value, 10) : null;
-    const curEnd = endInput && endInput.value.trim() ? parseInt(endInput.value, 10) : null;
+    // Current overrides: the MAIN-world interceptor mirrors
+    // window.__drRevisionStart/End to these dataset attrs.
+    const curStartStr = document.body.dataset.drOverrideStart;
+    const curEndStr = document.body.dataset.drOverrideEnd;
+    const curStart = curStartStr ? parseInt(curStartStr, 10) : null;
+    const curEnd = curEndStr ? parseInt(curEndStr, 10) : null;
 
     let newStart = curStart;
     let newEnd = curEnd;
@@ -283,9 +189,6 @@
     }
     if (!neighbor) return false;
 
-    if (startInput) { startInput.value = String(newStart); startInput.dispatchEvent(new Event('input', { bubbles: true })); }
-    if (endInput) { endInput.value = String(newEnd); endInput.dispatchEvent(new Event('input', { bubbles: true })); }
-
     if (mode === 'from' || tookBoth) clearAndHighlight('dr-version-from-btn');
     if (mode === 'to' || tookBoth) clearAndHighlight('dr-version-to-btn');
     updateInBetweenHighlights();
@@ -334,16 +237,12 @@
     }
   }
 
-  // Clear all revision overrides — the input fields, the window-level values
-  // (via postMessage to MAIN world), and all From/To button highlights.
-  // Called when the user picks a different option from the version type
-  // dropdown ("All versions" / "Named versions" / etc.) since that loads a
-  // different set of versions and the captured range no longer applies.
+  // Clear all revision overrides — the window-level values (via postMessage
+  // to MAIN world) and all From/To button highlights. Called when the user
+  // picks a different option from the version type dropdown ("All versions"
+  // / "Named versions" / etc.) since that loads a different set of versions
+  // and the captured range no longer applies.
   function resetRevisionOverrides(): void {
-    const s = document.getElementById('dr-revision-start') as HTMLInputElement | null;
-    const e = document.getElementById('dr-revision-end') as HTMLInputElement | null;
-    if (s) { s.value = ''; s.dispatchEvent(new Event('input', { bubbles: true })); }
-    if (e) { e.value = ''; e.dispatchEvent(new Event('input', { bubbles: true })); }
     const hl = document.querySelectorAll('.dr-btn-highlighted, .dr-btn-in-between');
     for (let i = 0; i < hl.length; i++) {
       hl[i].classList.remove('dr-btn-highlighted');
@@ -391,10 +290,10 @@
       // textarea is already focused (user is actively editing the name).
       const ta = (e.target as Element).closest('textarea');
       if (ta && document.activeElement === ta) return;
-      // Skip programmatic events from View diff / From / To button handlers —
-      // they've already set up the correct capture state themselves. (Note:
-      // .click() doesn't dispatch mousedown, so this mostly guards against
-      // future synthetic mousedown dispatches.)
+      // Skip programmatic events from the From / To button handlers and the
+      // neighbor-click trick — they've already set up the correct capture
+      // state themselves. (Note: .click() doesn't dispatch mousedown, so this
+      // mostly guards against future synthetic mousedown dispatches.)
       if (document.body.dataset.drSuppressCapture) return;
       const item = (e.target as Element).closest('[role="listitem"]');
       if (!item) return;
@@ -424,7 +323,6 @@
   // The panel is created dynamically when the user opens File > Version History.
   function setupRevisionOverrideObserver(): void {
     // Check if already present (panel was open before our script loaded)
-    injectRevisionOverrides();
     injectVersionButtons();
     setupVersionTypeDropdownListener();
     // Arm init capture if the chromecover is already in the DOM at script
@@ -435,7 +333,6 @@
 
     new MutationObserver((muts) => {
       armIfChromecoverAdded(muts);
-      injectRevisionOverrides();
       injectVersionButtons();
       setupVersionTypeDropdownListener();
     }).observe(document.body, { childList: true, subtree: true });

@@ -114,14 +114,14 @@ We considered two approaches for rewriting `showrevision` URLs:
 
 - **`chrome.declarativeNetRequest`** — static or dynamic redirect rules that
   rewrite URLs at the network layer. Rejected because the rules can't read
-  DOM state (the input field values or capture-mode flags), so they can't
-  support interactive/dynamic override values. Would only work for fixed
-  rewrites.
+  DOM state (capture-mode flags, per-listitem dataset caches), so they
+  can't support interactive/dynamic override values. Would only work for
+  fixed rewrites.
 - **XHR/fetch monkey-patching** (chosen) — inject a function into the MAIN
   world that patches `XMLHttpRequest.prototype.open` and `window.fetch` to
-  rewrite URLs before they're sent. Can read DOM state (input fields,
-  `dataset` attributes) at rewrite time. Requires `chrome.scripting`
-  permission and `world: 'MAIN'` injection.
+  rewrite URLs before they're sent. Can read `window.__drRevisionStart/End`
+  and shared DOM dataset attributes at rewrite time. Requires
+  `chrome.scripting` permission and `world: 'MAIN'` injection.
 
 ### Request details
 
@@ -177,7 +177,7 @@ listitem synchronously at rewrite time.
 ### Init-capture flow
 
 Extension captures these no-click requests so From/To highlights and the
-Start/End input fields stay in sync with the view:
+window-level override state stay in sync with the view:
 
 - Content script (`content-revisions.ts`) sets
   `document.body.dataset.drInitCapture = '1'` on three triggers:

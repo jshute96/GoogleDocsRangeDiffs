@@ -28,7 +28,7 @@ One-line descriptions of every source file, grouped by directory.
 | `src/types.d.ts` | Global type declarations: Window extensions, service worker globals |
 | `src/background.ts` | Service worker — handles `injectRevisionInterceptor` message, loads `background-injected.js` |
 | `src/background-injected.ts` | MAIN world functions: XHR/fetch interceptor, `showRevisions()`, `openVersionHistory()` |
-| `src/content-revisions.ts` | Content script: injects revision override UI and From/To buttons into Version History |
+| `src/content-revisions.ts` | Content script: injects From/To buttons into Version History and wires the selection-capture flow |
 
 ## Scripts (`scripts/`)
 

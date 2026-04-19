@@ -98,10 +98,6 @@ When version history is open, the extension adds these DOM elements
 (confirmed via CDP inspection):
 
 - `#dr-version-button-styles` — injected `<style>` block
-- `#dr-revision-overrides` — container with:
-  - `#dr-revision-start` — "Start revision" input field
-  - `#dr-revision-end` — "End revision" input field
-  - `#dr-revision-view-diff` — "View diff" button
 - `.dr-version-buttons` — one per revision entry, each containing:
   - `.dr-version-from-btn` — "From here" button
   - `.dr-version-to-btn` — "To here" button

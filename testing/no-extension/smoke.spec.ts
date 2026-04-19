@@ -15,7 +15,6 @@ test('Google Doc loads and version history has no extension UI', async ({ contex
   await page.waitForTimeout(5000);
 
   // Extension elements should NOT be present
-  await expect(page.locator('#dr-revision-overrides')).toHaveCount(0);
   await expect(page.locator('.dr-version-from-btn')).toHaveCount(0);
   await expect(page.locator('.dr-version-to-btn')).toHaveCount(0);
 
