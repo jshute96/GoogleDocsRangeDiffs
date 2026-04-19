@@ -3,6 +3,7 @@
   "name": "GoogleDocsDiffRange",
   "version": "0.1.0",
   "description": "Adds diff-between-versions feature to Google Docs",
+  "homepage_url": "https://github.com/jshute96/GoogleDocsDiffRange",
   "permissions": ["activeTab", "scripting", "tabs"],
   "host_permissions": [
     "https://docs.google.com/*"
