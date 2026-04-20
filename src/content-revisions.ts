@@ -1,17 +1,18 @@
 // Revision override UI for Google Docs Version History panel.
 //
-// Injects "From here" / "To here" buttons on each version listitem. Users
-// pick range endpoints by clicking versions; the MAIN-world interceptor
-// rewrites the resulting showrevision URL to the chosen range. Selected
-// endpoints highlight in solid blue; versions between them highlight in
-// light blue.
+// Injects "From here" / "To here" buttons on each version listitem and a
+// "Diff full history" button above the list. Users pick range endpoints
+// by clicking versions; the MAIN-world interceptor rewrites the resulting
+// showrevision URL to the chosen range. Selected endpoints highlight in
+// solid blue; versions between them highlight in light blue.
 //
 // The fetch/XHR interception runs in the MAIN world (same JS context as
 // the page) so it can monkey-patch the page's own network calls. This
 // content script writes to the shared DOM, which the MAIN world reads
-// from. Current overrides live on window.__drRevisionStart/End (owned by
-// MAIN) and are mirrored to document.body.dataset.drOverrideStart/End so
-// this world can read them.
+// synchronously. The canonical store for current overrides is
+// document.body.dataset.drOverrideStart/End — writable from either world
+// and visible across both at XHR.open() time. window.__drRevisionStart/End
+// is a MAIN-world-only mirror kept in sync by setOverrides().
 
 (function() {
   // Only run on Google Docs document pages
@@ -24,10 +25,10 @@
   //      find which listitem the request came from (to update highlight state)
   //   3. Triggers the listitem's normal click → fires a showrevision request
   //   4. The MAIN world interceptor reads the capture mode, parses the URL's
-  //      original start/end, updates window.__drRevisionStart/__drRevisionEnd
-  //      (mirrored to document.body.dataset.drOverrideStart/End so this world
-  //      can read the current values), and toggles .dr-btn-highlighted on the
-  //      from/to button(s) of the captured listitem.
+  //      original start/end, updates the canonical overrides
+  //      (document.body.dataset.drOverrideStart/End) via setOverrides(), and
+  //      toggles .dr-btn-highlighted on the from/to button(s) of the captured
+  //      listitem.
   function injectVersionButtons(): void {
     // Inject the highlight stylesheet once per page
     if (!document.getElementById('dr-version-button-styles')) {
@@ -36,9 +37,13 @@
       style.textContent =
         '.dr-version-button { padding:2px 8px; border:1px solid #dadce0; border-radius:4px; background:#fff; color:#1a73e8; cursor:pointer; font-size:11px; font-family:inherit; }' +
         '.dr-version-button.dr-btn-in-between:not(.dr-btn-highlighted) { background:#aecbfa; color:#1967d2; border-color:#8ab4f8; }' +
-        '.dr-version-button.dr-btn-highlighted { background:#1a73e8; color:#fff; border-color:#1a73e8; }';
+        '.dr-version-button.dr-btn-highlighted { background:#1a73e8; color:#fff; border-color:#1a73e8; }' +
+        '.dr-full-history-row { padding:8px 16px; font-family:Google Sans,Roboto,sans-serif; }' +
+        '.dr-full-history-btn { padding:4px 10px; font-size:12px; }';
       document.head.appendChild(style);
     }
+
+    injectFullHistoryButton();
 
     const items = document.querySelectorAll('[aria-label="Versions"] [role="listitem"]');
     items.forEach((item) => {
@@ -132,8 +137,7 @@
     const ne = parseInt(natEnd, 10);
     if (!Number.isFinite(ns) || !Number.isFinite(ne)) return false;
 
-    // Current overrides: the MAIN-world interceptor mirrors
-    // window.__drRevisionStart/End to these dataset attrs.
+    // Current overrides — canonical dataset store (shared across worlds).
     const curStartStr = document.body.dataset.drOverrideStart;
     const curEndStr = document.body.dataset.drOverrideEnd;
     const curStart = curStartStr ? parseInt(curStartStr, 10) : null;
@@ -193,10 +197,7 @@
     if (mode === 'to' || tookBoth) clearAndHighlight('dr-version-to-btn');
     updateInBetweenHighlights();
 
-    window.postMessage({
-      source: 'diffrange', action: 'setRevisionOverrides',
-      start: newStart, end: newEnd,
-    }, '*');
+    setDatasetOverrides(newStart, newEnd);
 
     document.body.dataset.drSuppressCapture = '1';
     try {
@@ -237,18 +238,129 @@
     }
   }
 
-  // Clear all revision overrides — the window-level values (via postMessage
-  // to MAIN world) and all From/To button highlights. Called when the user
-  // picks a different option from the version type dropdown ("All versions"
-  // / "Named versions" / etc.) since that loads a different set of versions
-  // and the captured range no longer applies.
+  // Synchronously write (or clear) the revision override on body.dataset —
+  // the shared-DOM canonical store the MAIN-world interceptor reads at
+  // XHR.open() time. Pass null for either bound to clear it. Also keeps the
+  // window.__dr* mirror in sync via a postMessage (best-effort; a stale
+  // mirror is harmless because nothing reads it anymore).
+  function setDatasetOverrides(start: number | null, end: number | null): void {
+    if (start != null) document.body.dataset.drOverrideStart = String(start);
+    else delete document.body.dataset.drOverrideStart;
+    if (end != null) document.body.dataset.drOverrideEnd = String(end);
+    else delete document.body.dataset.drOverrideEnd;
+    window.postMessage({
+      source: 'diffrange',
+      action: start == null && end == null ? 'resetRevisionOverrides' : 'setRevisionOverrides',
+      start: start ?? undefined, end: end ?? undefined,
+    }, '*');
+  }
+
+  // Inject the "Diff full history" action button at the top of the scrollable
+  // versions area, above the "This month" / date section heading. Idempotent.
+  function injectFullHistoryButton(): void {
+    const scrollable = document.querySelector('.DocsSidebarComponentsScrollableContentContainer');
+    if (!scrollable || scrollable.querySelector('.dr-full-history-row')) return;
+
+    const row = document.createElement('div');
+    row.className = 'dr-full-history-row';
+
+    const btn = document.createElement('button');
+    btn.textContent = 'Diff full history';
+    btn.className = 'dr-version-button dr-full-history-btn';
+    btn.addEventListener('click', (e: Event) => {
+      e.stopPropagation();
+      handleFullHistoryClick();
+    });
+    row.appendChild(btn);
+
+    scrollable.insertBefore(row, scrollable.firstChild);
+  }
+
+  // Handler for the "Diff full history" button. Sets the range to
+  // [1, maxRev] — rev 1 is always the first revision, and maxRev is the
+  // highest `end` the interceptor has seen across all showrevision URLs
+  // (mirrored to body.dataset.drMaxRev).
+  //
+  // Strategy: apply highlights + overrides ourselves, then force Docs to
+  // re-issue a showrevision so the rewritten URL is fetched. The newest
+  // version (item[0]) must end up as the Docs-selected tile:
+  //   - If item[0] is NOT currently selected: click it (selects + refetch).
+  //   - If item[0] IS currently selected: click-away-then-back (neighbor
+  //     click deselects, then item[0] click reselects and refetches).
+  // drSuppressCapture is set during both clicks so the listitem mousedown
+  // delegation doesn't overwrite the overrides we just set.
+  function handleFullHistoryClick(): void {
+    const maxRevStr = document.body.dataset.drMaxRev;
+    if (!maxRevStr) {
+      console.log('[DiffRange] Diff full history: max revision unknown');
+      return;
+    }
+    const maxRev = parseInt(maxRevStr, 10);
+    if (!Number.isFinite(maxRev) || maxRev < 1) {
+      console.log('[DiffRange] Diff full history: invalid max revision ' + maxRevStr);
+      return;
+    }
+
+    const items = Array.from(
+      document.querySelectorAll('[aria-label="Versions"] [role="listitem"]')
+    );
+    if (items.length === 0) return;
+
+    const first = items[0] as HTMLElement;  // newest
+    const last = items[items.length - 1] as HTMLElement;  // oldest
+
+    // Clear all existing highlights.
+    const existing = document.querySelectorAll('.dr-btn-highlighted, .dr-btn-in-between');
+    for (let i = 0; i < existing.length; i++) {
+      existing[i].classList.remove('dr-btn-highlighted');
+      existing[i].classList.remove('dr-btn-in-between');
+    }
+
+    // From = oldest (bottom), To = newest (top).
+    last.querySelector('.dr-version-from-btn')?.classList.add('dr-btn-highlighted');
+    first.querySelector('.dr-version-to-btn')?.classList.add('dr-btn-highlighted');
+    updateInBetweenHighlights();
+
+    setDatasetOverrides(1, maxRev);
+    console.log('[DiffRange] Diff full history: overrides set to 1:' + maxRev);
+
+    // Cancel any armed init-capture — otherwise the interceptor's init-capture
+    // branch would re-capture the click target's natural range and overwrite
+    // our overrides.
+    delete document.body.dataset.drInitCapture;
+
+    document.body.dataset.drSuppressCapture = '1';
+    try {
+      if (isSelected(first)) {
+        // item[0] already selected: Docs treats a click on it as a no-op, so
+        // click a neighbor first to deselect, then click item[0] to reselect
+        // and force a fresh showrevision. When there's only one item, we
+        // can't do the trick — overrides are still set and highlights
+        // updated, but no refetch happens (harmless for a single-version doc).
+        const neighbor = items.length > 1 ? (items[1] as HTMLElement) : null;
+        if (!neighbor) return;
+        neighbor.click();
+        first.click();
+      } else {
+        first.click();
+      }
+    } finally {
+      delete document.body.dataset.drSuppressCapture;
+    }
+  }
+
+  // Clear all revision overrides — the dataset canonical store and all
+  // From/To button highlights. Called when the user picks a different
+  // option from the version type dropdown ("All versions" / "Named
+  // versions" / etc.) since that loads a different set of versions and
+  // the captured range no longer applies.
   function resetRevisionOverrides(): void {
     const hl = document.querySelectorAll('.dr-btn-highlighted, .dr-btn-in-between');
     for (let i = 0; i < hl.length; i++) {
       hl[i].classList.remove('dr-btn-highlighted');
       hl[i].classList.remove('dr-btn-in-between');
     }
-    window.postMessage({ source: 'diffrange', action: 'resetRevisionOverrides' }, '*');
+    setDatasetOverrides(null, null);
     console.log('[DiffRange] revision overrides reset');
   }
 
@@ -358,10 +470,11 @@
         if (el.classList?.contains('docs-revisions-chromecover-content')
             || el.querySelector?.('.docs-revisions-chromecover-content')) {
           document.body.dataset.drInitCapture = '1';
-          // Clear any stale window-level overrides left by the previous
-          // session so the URL-rewrite path doesn't apply them before init
-          // capture runs.
-          window.postMessage({ source: 'diffrange', action: 'resetRevisionOverrides' }, '*');
+          // Clear any stale overrides left by the previous session so the
+          // URL-rewrite path doesn't apply them before init capture runs.
+          // Must be synchronous — Docs may fire the auto-showrevision
+          // within this same mutation batch.
+          setDatasetOverrides(null, null);
           console.log('[DiffRange] version history entry detected — init capture armed');
           return;
         }

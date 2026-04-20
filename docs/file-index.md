@@ -27,8 +27,8 @@ One-line descriptions of every source file, grouped by directory.
 | `src/manifest.json` | Manifest V3 config: permissions, content scripts, service worker |
 | `src/types.d.ts` | Global type declarations: Window extensions, service worker globals |
 | `src/background.ts` | Service worker — handles `injectRevisionInterceptor` message, loads `background-injected.js` |
-| `src/background-injected.ts` | MAIN world functions: XHR/fetch interceptor, `showRevisions()`, `openVersionHistory()` |
-| `src/content-revisions.ts` | Content script: injects From/To buttons into Version History and wires the selection-capture flow |
+| `src/background-injected.ts` | MAIN world: XHR/fetch interceptor, max-revision tracking, `showRevisions()`, `openVersionHistory()` |
+| `src/content-revisions.ts` | Content script: injects From/To + Diff-full-history buttons and wires the selection-capture flow |
 
 ## Scripts (`scripts/`)
 
@@ -48,7 +48,7 @@ One-line descriptions of every source file, grouped by directory.
 | `testing/extension/fixtures.ts` | Fixtures: connects via CDP to extension browser, provides service worker |
 | `testing/extension/smoke.spec.ts` | Smoke test: opens a Google Doc with extension, checks injection |
 | `testing/extension/helpers.ts` | Helpers: open doc + VH, range-state reads, click actions, log capture, extension reload |
-| `testing/extension/version-range.spec.ts` | Behavioral tests: init capture, From/To combinations, range reset, dropdown, re-entry |
+| `testing/extension/version-range.spec.ts` | Behavioral tests: init capture, From/To, range reset, dropdown, re-entry, full-history |
 | `testing/no-extension/playwright.config.ts` | Playwright config for live tests without extension |
 | `testing/no-extension/fixtures.ts` | Fixtures: connects via CDP to no-extension browser |
 | `testing/no-extension/smoke.spec.ts` | Smoke test: opens a Google Doc without extension as baseline |

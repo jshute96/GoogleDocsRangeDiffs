@@ -13,7 +13,10 @@ This extension adds diff-between-versions functionality to Google Docs.
    - The diff updates to show changes across the selected range.
    - Selected endpoints highlight in solid blue; versions between them
      highlight in light blue.
-4. Switching the dropdown (e.g., "All versions" → "Named versions") resets
+4. Click **Diff full history** above the versions list to diff from the
+   first revision to the newest — equivalent to **From here** on the oldest
+   version and **To here** on the newest in one click.
+5. Switching the dropdown (e.g., "All versions" → "Named versions") resets
    the range selection.
 
 ### Console API

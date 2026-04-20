@@ -4,6 +4,7 @@
 interface Window {
   __drRevisionStart: number | undefined;
   __drRevisionEnd: number | undefined;
+  __drMaxRevision: number | undefined;
   showRevisions: (start: number, end: number) => void;
   openVersionHistory: () => boolean;
 }

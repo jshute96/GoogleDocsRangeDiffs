@@ -20,6 +20,7 @@ import {
   clickFrom,
   clickTo,
   clickDateLabel,
+  clickDiffFullHistory,
   exitVersionHistory,
   reenterVersionHistory,
   switchDropdown,
@@ -235,6 +236,80 @@ test('exit and re-enter Version History: first item selected, From/To re-armed',
     const state = await getRangeState(page);
     expect(state.selectedIdx).toBe(0);
     await expectRange(page, 0, 0);
+  } finally {
+    await page.close();
+  }
+});
+
+test('Diff full history (item[0] already selected): spans full list, item[0] stays selected', async ({
+  context,
+  testDocUrl,
+}) => {
+  const page = await context.newPage();
+  const getLogs = captureDiffRangeLogs(page);
+  try {
+    await openDocAndVersionHistory(context, testDocUrl, page);
+    // Fresh open: item[0] is SelectedTile via init capture.
+    const before = await getRangeState(page);
+    expect(before.selectedIdx).toBe(0);
+    const n = before.itemCount;
+    expect(n).toBeGreaterThan(1);
+
+    // Pull the doc's max revision out of the init-capture "orig request" log
+    // (item[0]'s natural end = doc's latest revision).
+    const initLog = getLogs().find((l) => l.includes('orig request') && l.includes('capturing both'));
+    const initM = initLog?.match(/orig request:\s*(\d+)\s*to\s*(\d+)/);
+    if (!initM) throw new Error('no init-capture orig request in logs');
+    const maxRev = Number(initM[2]);
+
+    await clickDiffFullHistory(page);
+
+    // Range spans from oldest (item[n-1]) to newest (item[0]).
+    await expectRange(page, n - 1, 0);
+    // item[0] remains Docs-selected (click-away-then-back).
+    const after = await getRangeState(page);
+    expect(after.selectedIdx).toBe(0);
+    // Overrides reflect the full range: start=1, end=maxRev.
+    await expectOverrides(page, 1, maxRev);
+    // The outgoing URL was rewritten to the same range.
+    const rewritten = lastRewroteRange(getLogs());
+    expect(rewritten).not.toBeNull();
+    expect(rewritten!.start).toBe(1);
+    expect(rewritten!.end).toBe(maxRev);
+  } finally {
+    await page.close();
+  }
+});
+
+test('Diff full history (item[0] not selected): spans full list, item[0] becomes selected', async ({
+  context,
+  testDocUrl,
+}) => {
+  const page = await context.newPage();
+  const getLogs = captureDiffRangeLogs(page);
+  try {
+    await openDocAndVersionHistory(context, testDocUrl, page);
+    const initLog = getLogs().find((l) => l.includes('orig request') && l.includes('capturing both'));
+    const initM = initLog?.match(/orig request:\s*(\d+)\s*to\s*(\d+)/);
+    if (!initM) throw new Error('no init-capture orig request in logs');
+    const maxRev = Number(initM[2]);
+
+    // Move selection off item[0].
+    await clickListitem(page, 2);
+    const mid = await getRangeState(page);
+    expect(mid.selectedIdx).toBe(2);
+    const n = mid.itemCount;
+
+    await clickDiffFullHistory(page);
+
+    await expectRange(page, n - 1, 0);
+    const after = await getRangeState(page);
+    expect(after.selectedIdx).toBe(0);
+    await expectOverrides(page, 1, maxRev);
+    const rewritten = lastRewroteRange(getLogs());
+    expect(rewritten).not.toBeNull();
+    expect(rewritten!.start).toBe(1);
+    expect(rewritten!.end).toBe(maxRev);
   } finally {
     await page.close();
   }

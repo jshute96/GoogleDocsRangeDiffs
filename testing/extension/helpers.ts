@@ -184,6 +184,16 @@ export async function clickTo(page: Page, idx: number): Promise<void> {
 }
 
 /**
+ * Click the "Diff full history" button (above the revisions list). Waits for
+ * the DOM to settle — the click may fire one or two showrevisions and our
+ * capture flow needs a moment to apply highlights.
+ */
+export async function clickDiffFullHistory(page: Page): Promise<void> {
+  await page.locator('.dr-full-history-btn').click();
+  await page.waitForTimeout(2000);
+}
+
+/**
  * Click the date/time label on the listitem at `idx`. The label area opens
  * the rename textarea when focused, but Docs also treats it as selecting the
  * version. The listitem-level mousedown listener should handle it as 'both'.

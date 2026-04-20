@@ -4,14 +4,15 @@
 // read Closure Library internals, but cannot use chrome.* APIs.
 
 // Monkey-patches XMLHttpRequest.open and fetch to rewrite start/end
-// parameters on showrevision URLs. Override values live on
-// window.__drRevisionStart / window.__drRevisionEnd (canonical) and are
-// mirrored to document.body.dataset.drOverrideStart/End so the content
-// script (ISOLATED world) can read them. Also exposes
-// window.showRevisions(start, end) as a console-callable debug method.
+// parameters on showrevision URLs. The canonical override store is
+// document.body.dataset.drOverrideStart/End — shared DOM, writable
+// synchronously from either world. window.__drRevisionStart /
+// __drRevisionEnd is a MAIN-world-only mirror updated by setOverrides().
+// Also exposes window.showRevisions(start, end) as a console-callable
+// debug method.
 function revisionInterceptorFunc(): void {
-  // Set the canonical overrides and mirror them to the dataset so the
-  // content-script world can read the current values.
+  // Set the dataset (canonical) and update the MAIN-world mirror. Called
+  // from the capture branch on every From/To / init capture.
   function setOverrides(start: number | undefined, end: number | undefined): void {
     window.__drRevisionStart = start;
     window.__drRevisionEnd = end;
@@ -73,6 +74,22 @@ function revisionInterceptorFunc(): void {
     const origStartStr = url.match(/[?&]start=(\d+)/)?.[1];
     const origEndStr = url.match(/[?&]end=(\d+)/)?.[1];
 
+    // Record the highest `end` ever seen on any showrevision URL. The newest
+    // version's range always ends at the doc's latest revision, so the max of
+    // all observed ends equals the doc's total revision count — used by the
+    // "Diff full history" button. Mirrored to body.dataset.drMaxRev so the
+    // content-script world can read it.
+    if (origEndStr) {
+      const oe = parseInt(origEndStr, 10);
+      if (Number.isFinite(oe)) {
+        const cur = window.__drMaxRevision ?? 0;
+        if (oe > cur) {
+          window.__drMaxRevision = oe;
+          document.body.dataset.drMaxRev = String(oe);
+        }
+      }
+    }
+
     // Track what we captured, if anything: 'from' | 'to' | 'both' | null.
     let capturedAs: string | null = null;
 
@@ -115,8 +132,14 @@ function revisionInterceptorFunc(): void {
       const origEnd = origEndStr ? parseInt(origEndStr, 10) : null;
 
       if (origStart !== null && origEnd !== null) {
-        let newStart: number | null = window.__drRevisionStart ?? null;
-        let newEnd: number | null = window.__drRevisionEnd ?? null;
+        // Read current overrides from the dataset (shared-DOM canonical
+        // store) — the content-script world can write it synchronously, so
+        // dataset reflects the latest value even when a postMessage hasn't
+        // been delivered yet. window.__dr* is a MAIN-world-only mirror.
+        const curStartStr = document.body?.dataset.drOverrideStart;
+        const curEndStr = document.body?.dataset.drOverrideEnd;
+        let newStart: number | null = curStartStr ? parseInt(curStartStr, 10) : null;
+        let newEnd: number | null = curEndStr ? parseInt(curEndStr, 10) : null;
         let tookBoth = false;
 
         if (captureMode === 'from') {
@@ -189,8 +212,11 @@ function revisionInterceptorFunc(): void {
       delete document.body.dataset.drCaptureMode;
     }
 
-    const startVal = window.__drRevisionStart != null ? String(window.__drRevisionStart) : '';
-    const endVal = window.__drRevisionEnd != null ? String(window.__drRevisionEnd) : '';
+    // Rewrite uses the dataset values — the shared-DOM canonical store.
+    // The content script can update it synchronously (no postMessage round
+    // trip), so the correct values are available at XHR.open() time.
+    const startVal = document.body?.dataset.drOverrideStart ?? '';
+    const endVal = document.body?.dataset.drOverrideEnd ?? '';
 
     // Log: always "orig request" if we're handling (either captured or have
     // overrides to apply), otherwise "unhandled".

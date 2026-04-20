@@ -205,6 +205,72 @@ window-level override state stay in sync with the view:
 - **Fix.** Inspect `MutationRecord.addedNodes` for the chromecover —
   fires reliably on every entry (including re-entry).
 
+### Override storage: dataset is canonical
+
+Revision overrides live in two places:
+
+- `document.body.dataset.drOverrideStart` / `drOverrideEnd` —
+  **canonical, shared-DOM store**. Readable and writable from both worlds
+  (isolated and MAIN) synchronously.
+- `window.__drRevisionStart` / `__drRevisionEnd` — MAIN-world-only mirror,
+  updated by `setOverrides()` when the MAIN world's capture branch runs.
+
+The interceptor always reads overrides from the **dataset** (both for
+rewrite-time URL substitution and for computing the "current" value in
+the capture branch).
+
+#### Why: postMessage is async
+
+Earlier design used `window.postMessage` to ship new overrides from the
+content script (isolated) to the MAIN world. But:
+
+- `postMessage` is delivered as a *task*, not synchronously.
+- Docs fires a click-induced `showrevision` XHR synchronously inside the
+  `element.click()` call, which reaches the interceptor while the
+  `postMessage` is still queued.
+- The interceptor would read stale overrides and rewrite the URL with
+  the wrong range — highlights updated, but the fetched diff was stale.
+
+Writing `document.body.dataset` from the content script is synchronous
+and visible to the MAIN world immediately, so the interceptor sees the
+new overrides at XHR.open() time.
+
+### Max-revision tracking
+
+The doc's total revision count is the `end` of the newest version's
+`showrevision` URL — and any other version's `end` is strictly lower.
+
+- The interceptor tracks `max(end seen)` across every `showrevision` URL it
+  processes, stored on `window.__drMaxRevision` and mirrored to
+  `document.body.dataset.drMaxRev`.
+- Used by the **Diff full history** button to build a range from rev 1 to
+  the doc's latest revision without needing to click the newest version
+  first to learn its end.
+- Surviving dropdown switches is automatic: we only ever raise the max,
+  so a "Named versions" view (whose item[0].end may be lower) can't
+  clobber the true total learned during "All versions".
+
+### Diff full history button
+
+The button lives at the top of `.DocsSidebarComponentsScrollableContentContainer`
+(above the section heading like "This month") and triggers a one-click
+diff of the entire history:
+
+- Writes `body.dataset.drOverrideStart = '1'` and `.drOverrideEnd = maxRev`
+  synchronously (not via `postMessage` — see "Override storage" above).
+- Applies highlights: `From` on the oldest listitem (`items[n-1]`), `To`
+  on the newest (`items[0]`), in-between on the middle items.
+- Forces a fresh `showrevision` and leaves the newest version as the
+  Docs-selected tile:
+  - If `items[0]` is already selected, use the click-away-then-back trick
+    — click a neighbor (deselects `items[0]`, fires showrevision for the
+    neighbor), then click `items[0]` back (reselects, fires a second
+    showrevision). Both requests get rewritten to `[1, maxRev]`.
+  - If `items[0]` is not selected, click it directly.
+- Sets `drSuppressCapture` during the clicks so the listitem-mousedown
+  delegation can't overwrite the overrides, and clears any armed
+  `drInitCapture` for the same reason.
+
 ### Deferred highlight for newly-appeared listitems
 
 - Init capture may fire before `injectVersionButtons` wires up the From/To
