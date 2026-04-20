@@ -114,6 +114,23 @@ npm run test:no-extension    # no-extension only
   whichever version in the new list matches the currently-viewed
   version (or the default for that view). Assert "some item is
   selected and From/To are on it" rather than "item 0".
+- **Dropdown reselection still resets.** Picking the current dropdown
+  option fires `resetRevisionOverrides` and arms init-capture, even
+  though the list isn't replaced — the selected item's highlights
+  clear and then reappear via the next auto-fired showrevision.
+- **`reloadExtension` uses Chrome-private shadow-DOM selectors.**
+  `extensions-manager`, `extensions-toolbar`, `#devMode`,
+  `extensions-item`, `#dev-reload-button` live inside shadow roots
+  that Chrome can rename in any release. If reload fails after a
+  Chrome upgrade, update the selectors in `helpers.ts`. The helper
+  also matches the extension by its manifest `name`.
+- **Tests that capture console logs can't use `openDocAndVersionHistory`
+  unmodified.** Console listeners must attach before navigation.
+  Pre-create the page, attach the listener, then pass the page as the
+  third arg to `openDocAndVersionHistory`.
+- **Test doc must have ≥ 4 versions.** The suite assumes at least
+  four history items to exercise older/newer combinations. Documented
+  in `testing/test_config.json` usage.
 
 ### Test fixtures
 

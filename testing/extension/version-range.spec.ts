@@ -247,15 +247,7 @@ test('URL rewrite: setting From=item[2], To=item[0] sends start=item2.start, end
   const page = await context.newPage();
   const getLogs = captureDiffRangeLogs(page);
   try {
-    await page.goto(testDocUrl, { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(4000);
-    await page.keyboard.press('Control+Alt+Shift+KeyH');
-    await page.waitForSelector('[aria-label="Versions"] [role="listitem"]');
-    await page.waitForFunction(
-      () => !!document.querySelector('.dr-version-from-btn.dr-btn-highlighted'),
-      null,
-      { timeout: 10_000 }
-    );
+    await openDocAndVersionHistory(context, testDocUrl, page);
 
     // Discover the natural (start, end) range of the first few items.
     // Item 0 is already SelectedTile from init capture — clicking it wouldn't
@@ -283,7 +275,9 @@ test('URL rewrite: setting From=item[2], To=item[0] sends start=item2.start, end
     // end=ranges[0].end. The "rewrote to" log after the To click tells us
     // what got sent to Docs.
     await clickFrom(page, 2);
-    // After From(2) alone, range is (2,2) with bounds (ranges[2].start, ranges[2].end).
+    // After From(2) alone: newStart = ranges[2].start; newEnd stays at the
+    // current (ranges[0].end from init capture) since ranges[2].start <
+    // ranges[0].end, so no take-both fallback.
     await clickTo(page, 0);
     const rewritten = lastRewroteRange(getLogs());
     // A rewrite happens when inputs disagree with the URL's natural params.

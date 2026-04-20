@@ -27,15 +27,20 @@ export interface RangeState {
 }
 
 /**
- * Open a fresh page on the test doc, wait for it to settle, and open Version
- * History via the keyboard shortcut. Waits until at least one version
- * listitem exists in the DOM before returning.
+ * Open the test doc, wait for it to settle, and open Version History via the
+ * keyboard shortcut. Waits until at least one version listitem exists and
+ * both From and To highlights have landed (init capture is 'both').
+ *
+ * Pass an `existingPage` if you need to attach listeners (e.g.
+ * `captureDiffRangeLogs`) before navigation. Otherwise a fresh page is
+ * created.
  */
 export async function openDocAndVersionHistory(
   context: BrowserContext,
-  docUrl: string
+  docUrl: string,
+  existingPage?: Page
 ): Promise<Page> {
-  const page = await context.newPage();
+  const page = existingPage ?? (await context.newPage());
   await page.goto(docUrl, { waitUntil: 'domcontentloaded' });
   // Docs never reaches networkidle; settle via an explicit wait.
   await page.waitForTimeout(4000);
@@ -49,9 +54,12 @@ export async function openDocAndVersionHistory(
   await page.waitForSelector('[aria-label="Versions"] [role="listitem"]', {
     timeout: 15_000,
   });
-  // Wait for the init-capture showrevision + From/To highlights to land.
+  // Wait for the init-capture showrevision + both From and To highlights to
+  // land (init capture is always 'both', so both must be present).
   await page.waitForFunction(
-    () => !!document.querySelector('.dr-version-from-btn.dr-btn-highlighted'),
+    () =>
+      !!document.querySelector('.dr-version-from-btn.dr-btn-highlighted') &&
+      !!document.querySelector('.dr-version-to-btn.dr-btn-highlighted'),
     null,
     { timeout: 10_000 }
   );
@@ -238,13 +246,22 @@ export async function switchDropdown(page: Page, label: string): Promise<void> {
       hasText: new RegExp(label, 'i'),
     })
     .click();
-  // Wait for listitems to refresh and the init capture to land.
+  // The option click triggers resetRevisionOverrides synchronously — it
+  // clears highlights and sets drInitCapture. A short buffer lets that land
+  // before we poll, so we don't mistake stale pre-switch highlights for the
+  // new init-capture ones (especially when reselecting the current option,
+  // which doesn't replace the list items).
+  await page.waitForTimeout(100);
+  // Wait for the full cycle: init-capture flag consumed AND both highlights
+  // back in place.
   await page.waitForFunction(
-    () => !!document.querySelector('.dr-version-from-btn.dr-btn-highlighted'),
+    () =>
+      !document.body.dataset.drInitCapture &&
+      !!document.querySelector('.dr-version-from-btn.dr-btn-highlighted') &&
+      !!document.querySelector('.dr-version-to-btn.dr-btn-highlighted'),
     null,
     { timeout: 10_000 }
   );
-  await page.waitForTimeout(500);
 }
 
 /**
@@ -271,43 +288,6 @@ export function lastRewroteRange(logs: string[]): { start: number; end: number }
     if (m) return { start: Number(m[1]), end: Number(m[2]) };
   }
   return null;
-}
-
-/**
- * Parse "[DiffRange] orig request: N to M (capturing ...)" lines and return
- * the latest original request's {start, end}, or null if none seen.
- */
-export function lastOrigRequest(logs: string[]): { start: number; end: number } | null {
-  for (let i = logs.length - 1; i >= 0; i--) {
-    const m = logs[i].match(/orig request:\s*(\d+)\s*to\s*(\d+)/);
-    if (m) return { start: Number(m[1]), end: Number(m[2]) };
-  }
-  return null;
-}
-
-/**
- * Walk the versions list and learn each listitem's natural (start, end)
- * range by clicking it and reading the next "orig request" log. Restores
- * the From/To range afterward by clicking the original From then To items.
- *
- * Takes a shared log accessor so we can read the log state transitions.
- */
-export async function discoverItemRanges(
-  page: Page,
-  getLogs: () => string[]
-): Promise<Array<{ start: number; end: number }>> {
-  const count = await page.locator('[aria-label="Versions"] [role="listitem"]').count();
-  const ranges: Array<{ start: number; end: number }> = [];
-  for (let i = 0; i < count; i++) {
-    const before = getLogs().length;
-    await clickListitem(page, i);
-    // Find the newest "orig request" line after `before`.
-    const after = getLogs().slice(before);
-    const req = lastOrigRequest(after);
-    if (!req) throw new Error(`no orig request observed after clicking item ${i}`);
-    ranges[i] = req;
-  }
-  return ranges;
 }
 
 /**
