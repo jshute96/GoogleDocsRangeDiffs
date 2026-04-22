@@ -213,7 +213,10 @@ Revision overrides live in two places:
   **canonical, shared-DOM store**. Readable and writable from both worlds
   (isolated and MAIN) synchronously.
 - `window.__drRevisionStart` / `__drRevisionEnd` — MAIN-world-only mirror,
-  updated by `setOverrides()` when the MAIN world's capture branch runs.
+  written by `setOverrides()` in the interceptor's capture branch.
+  **Write-only — nothing reads it.** Kept because it's cheap and makes
+  the MAIN world's view match the dataset on any local reads added in
+  the future.
 
 The interceptor always reads overrides from the **dataset** (both for
 rewrite-time URL substitution and for computing the "current" value in
@@ -234,6 +237,127 @@ content script (isolated) to the MAIN world. But:
 Writing `document.body.dataset` from the content script is synchronous
 and visible to the MAIN world immediately, so the interceptor sees the
 new overrides at XHR.open() time.
+
+#### Gotcha: a MAIN-world message listener that wrote the dataset
+
+An earlier implementation had the content-script helper
+`setDatasetOverrides` post a message to the MAIN world, whose listener
+called `setOverrides(undefined, undefined)` — which *also cleared the
+dataset*. The posted-message task raced the init-capture XHR task:
+
+- Win: postMessage delivered first, clears (already-empty) dataset, then
+  init capture writes 920:925. Overrides stick.
+- Lose: init-capture XHR runs first, writes 920:925, then postMessage
+  delivers and wipes them.
+
+Since the mirror is write-only, both the postMessage and the MAIN-world
+listener were removed. The dataset writes from content-revisions.ts are
+now purely synchronous DOM writes with no cross-world round trip.
+
+### Arrow expand/collapse: selection pass-through
+
+The per-version "Expand detailed versions" / "Collapse detailed
+versions" `<button>` inside a listitem carries its own
+`jsaction="click:h5M12e;..."` — the same action name the listitem uses
+for selection. Docs' `h5M12e` handler on the button does **both**
+toggle expansion and select the containing listitem. We can't split
+them via event-phase tricks:
+
+- `stopPropagation` before jsaction's root listener kills expansion too
+  (tested: capture-phase on document, capture or bubble on the button).
+- Suppressing `mousedown` / `pointerdown` doesn't prevent selection —
+  selection fires off `click` (jsaction bubble).
+
+**Attempted suppression, rejected:**
+
+- Record the prior SelectedTile on mousedown, microtask-click it back.
+- Expansion worked; overrides stayed stable.
+- But Docs still fired showrevision for the arrow's item; rewriting
+  that to the prior range produced a visible diff-panel flicker.
+- Worse than the selection move — dropped the approach.
+
+**What we do instead:**
+
+- Treat an arrow click like a click on the revision body.
+- Fall through the button filter in `setupVersionListListener` so the
+  capture branch runs with `'both'`.
+- Overrides become the arrow item's natural range, matching what
+  Docs would have fetched on its own.
+
+**Arrow-specific: skip `captureForSelected`.**
+
+- That branch is for body clicks on the already-selected tile. Docs
+  won't re-fire showrevision in that case, so it uses the item's
+  cached `drNaturalStart/End` + a neighbor-click trick.
+- Arrows don't need the trick — they always fire a fresh
+  showrevision.
+- The arrow's *new* range may differ from the cached one (expanding
+  surfaces a sub-version range).
+- Fall through to the normal pending-capture path so the fresh URL's
+  start/end get captured.
+
+### Arrow-burst capture: two showrevisions, one user click
+
+Clicking the expand arrow on an unselected revision triggers a
+cancel-and-retry pattern inside Docs:
+
+1. Docs fires showrevision for the parent's **pre-expand** range
+   (e.g. `start=837&end=917`) — our mousedown handler had set
+   `drCaptureMode='both'`, so this captures and overrides become
+   837:917. `drCaptureMode` is consumed.
+2. Docs **cancels** that XHR (presumably because expansion picked a
+   different range to render).
+3. Docs fires the **real** showrevision for the post-expand range
+   (e.g. `start=916&end=917`). With `drCaptureMode` already consumed
+   by (1), this would normally hit the rewrite branch — Docs'
+   displayed diff would get overwritten with the stale 837:917 range.
+
+#### Fix: a short burst window
+
+- Arrow-mousedown sets `body.dataset.drArrowBurst = '1'` and
+  schedules its removal ~400ms later (timer is cancelable so a
+  second arrow click refreshes the window cleanly).
+- The interceptor mirrors the init-capture flow via the shared
+  `armBothOnSelected` helper: while `drArrowBurst` is set and
+  `drCaptureMode` is empty, it re-arms `drCaptureMode='both'` against
+  the current SelectedTile.
+- Every showrevision in the window captures — last-write-wins on
+  overrides, so final state matches the range Docs actually rendered.
+- The burst flag isn't deleted in the interceptor (the content-script
+  timer owns it); chained fetches inside the window all re-arm.
+
+### Highlight persistence across expand-driven re-render
+
+Expanding sub-versions re-renders almost every listitem — only
+`item[0]` keeps DOM identity (verified with a per-listitem dataset
+marker probe). Our injected From/To buttons and `.dr-btn-highlighted`
+classes disappear with the old nodes.
+
+**Restoration flag:**
+
+- The capture branch and `captureForSelected` both set
+  `body.dataset.drBothOnSelected = '1'` when From and To land on the
+  same just-selected listitem (`tookBoth`).
+- `injectVersionButtons` calls `restoreBothOnSelectedIfFlagged` each
+  observer tick and, if the flag is set, re-applies From/To to the
+  current SelectedTile.
+- Cleared on any divergent capture (From/To diverge) and on
+  `resetRevisionOverrides`. `handleFullHistoryClick` clears it
+  explicitly since it sets a wide split range.
+- Idempotent with a fast-path early-out when highlights are already
+  correct — avoids DOM churn on steady-state observer ticks.
+
+**Known limitation — split ranges don't persist through expand:**
+
+- If the user has a divergent From/To (e.g., From on item 3, To on
+  item 0) and then clicks the expand arrow on a row, Docs' re-render
+  wipes the highlighted buttons on both endpoint items.
+- `drBothOnSelected` isn't set (the capture isn't a both-on-selected
+  case), so the restore logic doesn't fire.
+- The deferred-highlight `dataset.drHighlight*` flags sit on DOM
+  nodes that are gone too, so they can't rescue state either.
+- Range overrides themselves are unaffected — only the visual
+  highlights disappear. Click From/To to re-highlight if needed.
 
 ### Max-revision tracking
 

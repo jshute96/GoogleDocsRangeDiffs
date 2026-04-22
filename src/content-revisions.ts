@@ -106,9 +106,44 @@
 
     setupVersionListListener();
     setupVersionTypeDropdownListener();
+    restoreBothOnSelectedIfFlagged();
     // Re-apply in-between highlights to any newly-added items (e.g., when the
     // user expands a version's detailed sub-versions, new listitems appear).
     updateInBetweenHighlights();
+  }
+
+  // If body.dataset.drBothOnSelected is set (the last capture landed From and
+  // To on the same, just-selected listitem), re-apply From/To highlights to
+  // whichever listitem currently wears the SelectedTile class. Handles the
+  // case where clicking the arrow to expand sub-versions causes Docs to wipe
+  // and re-render our injected buttons — the highlights go with the old DOM
+  // nodes, so we restore them on the fresh ones. Idempotent: if highlights
+  // are already correct, this re-applies the same classes. The flag persists
+  // until a capture diverges From/To or overrides reset.
+  function restoreBothOnSelectedIfFlagged(): void {
+    if (!document.body.dataset.drBothOnSelected) return;
+    const items = document.querySelectorAll(
+      '[aria-label="Versions"] [role="listitem"]'
+    );
+    let selected: Element | null = null;
+    for (let i = 0; i < items.length; i++) {
+      if (isSelected(items[i])) { selected = items[i]; break; }
+    }
+    if (!selected) return;
+    // Fast path: highlights already correct on the selected tile and no
+    // stray highlights elsewhere — nothing to do. Saves DOM churn on the
+    // steady-state observer ticks that arrive when the list isn't changing.
+    const fromOk = !!selected.querySelector('.dr-version-from-btn.dr-btn-highlighted');
+    const toOk = !!selected.querySelector('.dr-version-to-btn.dr-btn-highlighted');
+    if (fromOk && toOk) {
+      const stray = Array.from(document.querySelectorAll('.dr-btn-highlighted'))
+        .some(b => !selected!.contains(b));
+      if (!stray) return;
+    }
+    const hl = document.querySelectorAll('.dr-btn-highlighted');
+    for (let i = 0; i < hl.length; i++) hl[i].classList.remove('dr-btn-highlighted');
+    selected.querySelector('.dr-version-from-btn')?.classList.add('dr-btn-highlighted');
+    selected.querySelector('.dr-version-to-btn')?.classList.add('dr-btn-highlighted');
   }
 
   // True when Docs has marked this listitem as the currently-displayed
@@ -176,6 +211,15 @@
       if (btn) btn.classList.add('dr-btn-highlighted');
     };
 
+    // Keep drBothOnSelected in sync with the final highlight state: set when
+    // From and To both landed on this (selected) item, clear otherwise. The
+    // interceptor's capture branch does the same — captureForSelected
+    // bypasses that branch (no captureMode set during the neighbor click),
+    // so we must maintain the flag here too, otherwise a later expand would
+    // misfire the restore logic.
+    if (tookBoth) document.body.dataset.drBothOnSelected = '1';
+    else delete document.body.dataset.drBothOnSelected;
+
     // If only highlights differ (same range), fix highlights — no fetch needed.
     if (!rangeChanged) {
       if (mode === 'from' || tookBoth) clearAndHighlight('dr-version-from-btn');
@@ -240,19 +284,18 @@
 
   // Synchronously write (or clear) the revision override on body.dataset —
   // the shared-DOM canonical store the MAIN-world interceptor reads at
-  // XHR.open() time. Pass null for either bound to clear it. Also keeps the
-  // window.__dr* mirror in sync via a postMessage (best-effort; a stale
-  // mirror is harmless because nothing reads it anymore).
+  // XHR.open() time. Pass null for either bound to clear it.
+  //
+  // No postMessage to the MAIN world: the `window.__dr*` mirror is
+  // write-only (nothing reads it), and a round-trip message was racing
+  // with Docs' auto-fired showrevision XHR — the message could arrive
+  // *after* the interceptor's init-capture branch had already repopulated
+  // the dataset, wiping out the capture.
   function setDatasetOverrides(start: number | null, end: number | null): void {
     if (start != null) document.body.dataset.drOverrideStart = String(start);
     else delete document.body.dataset.drOverrideStart;
     if (end != null) document.body.dataset.drOverrideEnd = String(end);
     else delete document.body.dataset.drOverrideEnd;
-    window.postMessage({
-      source: 'diffrange',
-      action: start == null && end == null ? 'resetRevisionOverrides' : 'setRevisionOverrides',
-      start: start ?? undefined, end: end ?? undefined,
-    }, '*');
   }
 
   // Inject the "Diff full history" action button at the top of the scrollable
@@ -324,6 +367,12 @@
     setDatasetOverrides(1, maxRev);
     console.log('[DiffRange] Diff full history: overrides set to 1:' + maxRev);
 
+    // Diff full history puts From on the oldest item and To on the newest —
+    // a divergent range, not From=To on the selected item. Clear the
+    // both-on-selected flag so the restore logic in injectVersionButtons
+    // doesn't reapply From/To onto the selected tile and clobber the range.
+    delete document.body.dataset.drBothOnSelected;
+
     // Cancel any armed init-capture — otherwise the interceptor's init-capture
     // branch would re-capture the click target's natural range and overwrite
     // our overrides.
@@ -361,6 +410,7 @@
       hl[i].classList.remove('dr-btn-in-between');
     }
     setDatasetOverrides(null, null);
+    delete document.body.dataset.drBothOnSelected;
     console.log('[DiffRange] revision overrides reset');
   }
 
@@ -382,6 +432,12 @@
     }, true);
   }
 
+  // Timer handle for the arrow-burst window. Stored at module scope so a
+  // second arrow click within the window can cancel the first timer before
+  // scheduling its own — otherwise the first timer would fire at ~400ms
+  // after click 1 and wipe the burst flag mid-way through click 2's window.
+  let arrowBurstTimer: ReturnType<typeof setTimeout> | null = null;
+
   // Set up a delegated capture-phase mousedown listener on the versions list
   // so that pressing on a version directly (not via our From/To buttons) is
   // treated as capturing both bounds. We listen on mousedown rather than
@@ -394,8 +450,17 @@
     if (!list || list.dataset.drListenerAttached) return;
     list.dataset.drListenerAttached = '1';
     list.addEventListener('mousedown', (e: Event) => {
-      // Skip presses on the more-actions / jump-to buttons.
-      if ((e.target as Element).closest('button')) return;
+      // Skip presses on other buttons (more-actions, our own From/To, etc.).
+      // The expand/collapse arrow IS allowed through — Docs treats it like a
+      // version selection (fires showrevision for the containing listitem),
+      // so we want the normal 'both' capture branch to update the range to
+      // that item's natural start/end.
+      const btn = (e.target as Element).closest('button');
+      const isArrow = !!btn && (
+        btn.getAttribute('aria-label') === 'Expand detailed versions'
+        || btn.getAttribute('aria-label') === 'Collapse detailed versions'
+      );
+      if (btn && !isArrow) return;
       // Every listitem contains a rename textarea ("Name this version"), so
       // we can't skip based on "target is a textarea" — that would miss the
       // label click Docs treats as selecting the version. Only skip when the
@@ -409,9 +474,30 @@
       if (document.body.dataset.drSuppressCapture) return;
       const item = (e.target as Element).closest('[role="listitem"]');
       if (!item) return;
-      // If the user pressed on the already-selected version, Docs won't fire
-      // a new showrevision — use the neighbor-click trick to apply the range.
-      if (isSelected(item) && captureForSelected(item, 'both')) {
+      // Arrow clicks: Docs often fires *two* showrevisions in quick
+      // succession — one for the pre-expand range (which it then cancels)
+      // and one for the post-expand range that actually renders. The normal
+      // pending-capture flag is consumed by the first request, so the
+      // second would miss it and hit the rewrite branch (clobbering the
+      // displayed range). Arm a short burst window; the interceptor reads
+      // drArrowBurst and re-arms capture='both' for each follow-up request
+      // in the window, so the real (second) range wins.
+      if (isArrow) {
+        document.body.dataset.drArrowBurst = '1';
+        if (arrowBurstTimer !== null) clearTimeout(arrowBurstTimer);
+        arrowBurstTimer = setTimeout(() => {
+          delete document.body.dataset.drArrowBurst;
+          arrowBurstTimer = null;
+        }, 400);
+      }
+      // If the user pressed on the already-selected version via the revision
+      // body/label, Docs won't fire a new showrevision — use the
+      // neighbor-click trick to apply the range from the cached natural
+      // values. The expand/collapse arrow is different: clicking it *does*
+      // fire a showrevision (expanding children changes the range Docs
+      // fetches for this revision), so skip this branch and fall through to
+      // the standard pending-capture path so the fresh URL gets captured.
+      if (!isArrow && isSelected(item) && captureForSelected(item, 'both')) {
         // Don't block mousedown when the target is a textarea — we want Docs
         // to still focus it so the user can edit the rename.
         if (!ta) {

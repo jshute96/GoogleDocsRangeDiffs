@@ -50,23 +50,32 @@ function revisionInterceptorFunc(): void {
     }
   }
 
-  // Listen for reset messages from content-revisions.ts (sent when the user
-  // picks a new option from the version type dropdown). Clears the
-  // window-level overrides so subsequent showrevision requests pass through
-  // unmodified.
-  window.addEventListener('message', (e: MessageEvent) => {
-    if (e.source !== window) return;
-    if (!e.data || e.data.source !== 'diffrange') return;
-    if (e.data.action === 'resetRevisionOverrides') {
-      setOverrides(undefined, undefined);
-      console.log('[DiffRange] window overrides cleared');
-    } else if (e.data.action === 'setRevisionOverrides') {
-      const s = typeof e.data.start === 'number' ? e.data.start : undefined;
-      const en = typeof e.data.end === 'number' ? e.data.end : undefined;
-      setOverrides(s, en);
-      console.log('[DiffRange] window overrides set to ' + s + ':' + en);
+  // Find the currently-SelectedTile listitem, mark it as the pending capture
+  // target, and set drCaptureMode='both' so the capture branch below runs
+  // for the in-flight XHR. Used by the init-capture and arrow-burst paths,
+  // which both claim auto-fired (non-user-click) showrevisions. Bails if
+  // drCaptureMode is already set (a concurrent user capture takes
+  // precedence). If `consumeKey` is supplied, delete that dataset flag
+  // after a successful claim — init-capture is one-shot; arrow-burst is
+  // owned by a content-script timer and stays armed across the window.
+  function armBothOnSelected(consumeKey: string | null): void {
+    if (document.body?.dataset.drCaptureMode) return;
+    const items = document.querySelectorAll('[aria-label="Versions"] [role="listitem"]');
+    let selected: Element | null = null;
+    for (let i = 0; i < items.length; i++) {
+      const c = (items[i] as HTMLElement).className || '';
+      if (c.indexOf('SelectedTile') !== -1 && c.indexOf('UnselectedTile') === -1) {
+        selected = items[i];
+        break;
+      }
     }
-  });
+    if (!selected) return;
+    const oldPending = document.querySelector('.dr-pending-capture');
+    if (oldPending) oldPending.classList.remove('dr-pending-capture');
+    selected.classList.add('dr-pending-capture');
+    document.body.dataset.drCaptureMode = 'both';
+    if (consumeKey) delete document.body.dataset[consumeKey];
+  }
 
   function rewriteRevisionUrl(url: string): string {
     if (url.indexOf('/showrevision?') === -1) return url;
@@ -94,32 +103,16 @@ function revisionInterceptorFunc(): void {
     let capturedAs: string | null = null;
 
     // Init capture: on panel open, dropdown switch, or re-entry after the
-    // back arrow, Docs auto-fires a showrevision for the selected (top)
-    // version with no click involved. content-revisions.ts sets
-    // document.body.dataset.drInitCapture in those moments. We claim the
-    // request by locating the currently-selected listitem (SelectedTile class)
-    // and converting this into a standard 'both' capture so the rest of the
-    // capture-mode branch can highlight From/To on it uniformly. We only
-    // consume the flag when drCaptureMode isn't already set — if a user click
-    // interleaved first, that capture takes precedence and init waits.
-    if (document.body?.dataset.drInitCapture && !document.body?.dataset.drCaptureMode) {
-      const items = document.querySelectorAll('[aria-label="Versions"] [role="listitem"]');
-      let selected: Element | null = null;
-      for (let i = 0; i < items.length; i++) {
-        const c = (items[i] as HTMLElement).className || '';
-        if (c.indexOf('SelectedTile') !== -1 && c.indexOf('UnselectedTile') === -1) {
-          selected = items[i];
-          break;
-        }
-      }
-      if (selected) {
-        const oldPending = document.querySelector('.dr-pending-capture');
-        if (oldPending) oldPending.classList.remove('dr-pending-capture');
-        selected.classList.add('dr-pending-capture');
-        document.body.dataset.drCaptureMode = 'both';
-        delete document.body.dataset.drInitCapture;
-      }
-    }
+    // back arrow, Docs auto-fires showrevision for the selected version
+    // with no click involved. drInitCapture is one-shot — consume on claim.
+    if (document.body?.dataset.drInitCapture) armBothOnSelected('drInitCapture');
+    // Arrow-burst capture: Docs fires a pre-expand fetch (cancelled) and
+    // then the real post-expand fetch for arrow clicks. The first consumes
+    // the drCaptureMode set by mousedown, so without this re-arm the real
+    // second request would lose its range. Pass null for the consume key —
+    // the burst flag is owned by a timer in content-revisions.ts, letting
+    // every request in the window re-arm (last-write-wins on overrides).
+    if (document.body?.dataset.drArrowBurst) armBothOnSelected(null);
 
     // Capture mode: when the user clicked "From here" or "To here" on a
     // version, content-revisions.ts sets document.body.dataset.drCaptureMode
@@ -133,9 +126,9 @@ function revisionInterceptorFunc(): void {
 
       if (origStart !== null && origEnd !== null) {
         // Read current overrides from the dataset (shared-DOM canonical
-        // store) — the content-script world can write it synchronously, so
-        // dataset reflects the latest value even when a postMessage hasn't
-        // been delivered yet. window.__dr* is a MAIN-world-only mirror.
+        // store) — the content-script world writes it synchronously, so the
+        // MAIN world sees the latest value at XHR.open() time. window.__dr*
+        // is a write-only MAIN-world mirror (nothing reads it).
         const curStartStr = document.body?.dataset.drOverrideStart;
         const curEndStr = document.body?.dataset.drOverrideEnd;
         let newStart: number | null = curStartStr ? parseInt(curStartStr, 10) : null;
@@ -203,6 +196,19 @@ function revisionInterceptorFunc(): void {
           }
           pending.classList.remove('dr-pending-capture');
           updateInBetweenHighlights();
+
+          // When the capture lands From and To on the *same* listitem (the
+          // just-selected one), flag it for restoration: a subsequent
+          // re-render — e.g., Docs wipes the listitem DOM when it expands
+          // sub-versions under the arrow — would otherwise lose the
+          // highlights. injectVersionButtons reads this flag and re-applies
+          // From/To to the current SelectedTile. The flag is cleared on any
+          // capture where From and To diverge, and on reset.
+          if (tookBoth) {
+            document.body.dataset.drBothOnSelected = '1';
+          } else {
+            delete document.body.dataset.drBothOnSelected;
+          }
         }
 
         capturedAs = tookBoth ? 'both' : captureMode;
