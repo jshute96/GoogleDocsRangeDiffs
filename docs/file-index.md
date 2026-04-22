@@ -45,12 +45,12 @@ One-line descriptions of every source file, grouped by directory.
 |------|-------------|
 | `testing/test-env.ts` | Shared test env: paths, CDP port constants, test config loader |
 | `testing/extension/playwright.config.ts` | Playwright config for live tests with extension |
-| `testing/extension/fixtures.ts` | Fixtures: connects via CDP to extension browser, provides service worker |
-| `testing/extension/smoke.spec.ts` | Smoke test: opens a Google Doc with extension, checks injection |
-| `testing/extension/helpers.ts` | Helpers: open doc + VH, range-state reads, click actions, log capture, extension reload |
+| `testing/extension/fixtures.ts` | Worker-scoped fixtures: CDP context, shared `page` with VH open, `logs` buffer, service worker |
+| `testing/extension/smoke.spec.ts` | Smoke test: verifies extension UI is injected into the shared VH page |
+| `testing/extension/helpers.ts` | Helpers: open doc + VH, range-state reads, click actions, reset/reload |
 | `testing/extension/version-range.spec.ts` | Behavioral tests: init capture, From/To, range reset, dropdown, re-entry, full-history |
 | `testing/no-extension/playwright.config.ts` | Playwright config for live tests without extension |
-| `testing/no-extension/fixtures.ts` | Fixtures: connects via CDP to no-extension browser |
+| `testing/no-extension/fixtures.ts` | Worker-scoped fixtures: CDP context + shared `page` with VH open |
 | `testing/no-extension/smoke.spec.ts` | Smoke test: opens a Google Doc without extension as baseline |
 
 ## Design Docs (`docs/`)

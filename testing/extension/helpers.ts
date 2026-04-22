@@ -27,13 +27,31 @@ export interface RangeState {
 }
 
 /**
- * Open the test doc, wait for it to settle, and open Version History via the
- * keyboard shortcut. Waits until at least one version listitem exists and
- * both From and To highlights have landed (init capture is 'both').
+ * Find a tab safe to navigate away from. "Safe" means about:blank or
+ * already on the test doc's origin — anything else is probably something
+ * the user is actually using, so we don't touch it. Returns undefined if
+ * no suitable tab exists; the caller should create a new one.
+ */
+export function findReusableTab(pages: Page[], testDocUrl: string): Page | undefined {
+  const origin = new URL(testDocUrl).origin;
+  for (const p of pages) {
+    const url = p.url();
+    if (url === 'about:blank' || url === '' || url.startsWith(origin)) {
+      return p;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Open the test doc, wait for it to settle, and open Version History by
+ * clicking the toolbar clock button. Waits until at least one version
+ * listitem exists and both From and To highlights have landed (init
+ * capture is 'both').
  *
- * Pass an `existingPage` if you need to attach listeners (e.g.
- * `captureDiffRangeLogs`) before navigation. Otherwise a fresh page is
- * created.
+ * Pass an `existingPage` if you want to reuse a tab (fixtures do this to
+ * avoid `newPage` raising the OS window) or need to attach listeners
+ * before navigation. Otherwise a fresh page is created.
  */
 export async function openDocAndVersionHistory(
   context: BrowserContext,
@@ -44,13 +62,12 @@ export async function openDocAndVersionHistory(
   await page.goto(docUrl, { waitUntil: 'domcontentloaded' });
   // Docs never reaches networkidle; settle via an explicit wait.
   await page.waitForTimeout(4000);
-  // A CDP-opened page doesn't inherit focus; `bringToFront` + a click on
-  // the doc body ensures the keyboard shortcut reaches Docs' shortcut
-  // handler (which lives on a hidden text-event-target iframe).
-  await page.bringToFront();
-  await page.click('body');
-  await page.waitForTimeout(300);
-  await page.keyboard.press('Control+Alt+Shift+KeyH');
+  // Click the toolbar clock icon to open Version History. We prefer this
+  // over `Control+Alt+Shift+KeyH` because the keyboard shortcut only
+  // reaches Docs' hidden text-event-target iframe handler when the OS
+  // window has focus — which would require `page.bringToFront()` and
+  // cause the browser window to pop up on every test run.
+  await page.locator('#docs-revisions-appbarbutton').click();
   await page.waitForSelector('[aria-label="Versions"] [role="listitem"]', {
     timeout: 15_000,
   });
@@ -225,14 +242,12 @@ export async function exitVersionHistory(page: Page): Promise<void> {
 }
 
 /**
- * Re-enter version history after a prior exit. Same shortcut as the first
+ * Re-enter version history after a prior exit. Same click as the first
  * open, but specifically waits for the extension's From/To highlight to
  * reappear on the selected item — that's the init-capture's signal.
  */
 export async function reenterVersionHistory(page: Page): Promise<void> {
-  await page.click('body');
-  await page.waitForTimeout(200);
-  await page.keyboard.press('Control+Alt+Shift+KeyH');
+  await page.locator('#docs-revisions-appbarbutton').click();
   await page.waitForSelector('[aria-label="Versions"] [role="listitem"]', {
     timeout: 10_000,
   });
@@ -241,6 +256,20 @@ export async function reenterVersionHistory(page: Page): Promise<void> {
     null,
     { timeout: 10_000 }
   );
+}
+
+/**
+ * Reset to a clean init-capture state between tests on a shared page.
+ * Exits version history if open, then re-enters — this retriggers Docs'
+ * init-capture, so the range collapses to item[0] and From/To highlights
+ * land there regardless of what the previous test did.
+ */
+export async function resetRange(page: Page): Promise<void> {
+  const backBtn = page.locator('.docs-revisions-chromecover-titlebar-button-back');
+  if (await backBtn.count()) {
+    await exitVersionHistory(page);
+  }
+  await reenterVersionHistory(page);
 }
 
 /**

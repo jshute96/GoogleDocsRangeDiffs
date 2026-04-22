@@ -87,17 +87,42 @@ npm run test:no-extension    # no-extension only
 - `testing/extension/helpers.ts` — reusable pieces: `openDocAndVersionHistory`,
   `getRangeState`, `expectRange`, `clickFrom` / `clickTo` / `clickListitem`,
   `switchDropdown`, `exitVersionHistory` / `reenterVersionHistory`,
-  `captureDiffRangeLogs`, `reloadExtension`.
+  `resetRange`, `captureDiffRangeLogs`, `reloadExtension`.
 - `testing/extension/version-range.spec.ts` — behavioral suite for the
   extension's range UI (init capture, From/To combinations, range reset,
   dropdown switch, re-entry, URL rewrite correctness).
 
+### Shared page / once-per-worker fixtures
+
+- `fixtures.ts` defines **worker-scoped** private fixtures
+  `_sharedContext`, `_sharedPage`, and `logs`. The built-in test-scoped
+  `context` / `page` are overridden to pipe through, so tests still
+  destructure `{ page, logs }` as usual. Playwright refuses to re-scope
+  built-ins, hence the private names.
+- `_sharedPage` opens the doc + version history once per worker and
+  reuses `_sharedContext.pages()[0]` — an existing tab — instead of
+  `newPage()`. CDP's `Target.createTarget` activates the new tab and
+  raises the OS window; reusing an existing tab keeps it quiet.
+- `logs` is a `[DiffRange]` console buffer attached to the shared page.
+  Tests call `logs.all()` to read; `beforeEach` calls `logs.clear()`.
+- `beforeEach` calls `resetRange(page)` — exits version history if open
+  and re-enters, which retriggers init-capture so each test starts with
+  item[0] selected and From/To collapsed on it.
+- The extension is reloaded exactly once per worker inside the
+  `_sharedPage` fixture (so `pretest`'s fresh `dist/` is picked up).
+  `reloadExtension` opens a transient `chrome://extensions` tab — the
+  one per-worker window-raise we accept. Don't add a `beforeEach` reload.
+- We don't close the shared page at teardown — it's the user's
+  interactive browser tab.
+
 ### Gotchas discovered while writing the suite
 
-- **CDP-opened pages don't have focus.** Before pressing the
-  `Control+Alt+Shift+KeyH` shortcut, call `page.bringToFront()` and
-  click the doc body — otherwise the shortcut doesn't reach Docs'
-  text-event-target iframe handler.
+- **Open version history by clicking the toolbar clock button, not
+  the keyboard shortcut.** `Control+Alt+Shift+KeyH` only reaches Docs'
+  hidden text-event-target iframe handler when the OS window has
+  focus, which forces `page.bringToFront()` and pops the browser
+  window on every run. Clicking `#docs-revisions-appbarbutton` works
+  without focus and mirrors how a user actually opens the panel.
 - **Closure / MDC div-buttons ignore `element.click()`.** The
   chromecover's back arrow (`.docs-revisions-chromecover-titlebar-button-back`)
   needs a real click via Playwright — use
@@ -124,10 +149,10 @@ npm run test:no-extension    # no-extension only
   that Chrome can rename in any release. If reload fails after a
   Chrome upgrade, update the selectors in `helpers.ts`. The helper
   also matches the extension by its manifest `name`.
-- **Tests that capture console logs can't use `openDocAndVersionHistory`
-  unmodified.** Console listeners must attach before navigation.
-  Pre-create the page, attach the listener, then pass the page as the
-  third arg to `openDocAndVersionHistory`.
+- **Log-consuming tests use the shared `logs` fixture.** Its console
+  listener is attached before the shared page navigates, so no per-test
+  setup is needed — just read `logs.all()`. `captureDiffRangeLogs` is
+  still exported for ad-hoc scripts that create their own page.
 - **Test doc must have ≥ 4 versions.** The suite assumes at least
   four history items to exercise older/newer combinations. Documented
   in `testing/test_config.json` usage.
