@@ -12,6 +12,22 @@ and network requests. Discovered while building the revision diff feature.
 - **Programmatically:** Dispatch the keyboard event on the text event target
   iframe (see [Keyboard shortcuts](#keyboard-shortcuts) below)
 
+### "Changes since …" intermediate screen
+
+- Clicking the toolbar clock icon (`#docs-revisions-appbarbutton`) sometimes
+  lands on an intermediate "Changes since Today, X:YY AM" screen instead of
+  the full versions pane.
+- The screen has a blue **"See full version history"** pill button in the
+  titlebar — `div[role="button"][aria-label="See full version history"]`
+  (class `docs-revisions-chromecover-titlebar-button-action`).
+- Clicking it transitions to the normal versions pane.
+- Test helpers handle this by waiting for either the versions list or the
+  "See full version history" button, and clicking through if the latter
+  appears. See `ensureVersionsListVisible` in `testing/extension/helpers.ts`.
+- The File → Version history menu is *not* a reliable alternative: jsaction
+  filters untrusted events on menu items, so synthetic clicks don't open the
+  submenu.
+
 ### DOM structure (as of April 2026)
 
 When the user opens Version History, the panel appears as a sidebar on the

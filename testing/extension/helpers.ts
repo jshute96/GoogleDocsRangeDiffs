@@ -44,6 +44,29 @@ export function findReusableTab(pages: Page[], testDocUrl: string): Page | undef
 }
 
 /**
+ * After clicking the clock icon (or re-entering VH), Docs sometimes lands on
+ * a "Changes since Today, X:YY AM" intermediate screen that requires one more
+ * click on "See full version history" to reveal the versions pane. Detect
+ * either outcome and click through if needed. We can't use the File menu as
+ * an alternative — jsaction filters untrusted events on menu items, so the
+ * submenu doesn't open reliably from synthetic clicks.
+ */
+async function ensureVersionsListVisible(page: Page, timeoutMs: number): Promise<void> {
+  const listSel = '[aria-label="Versions"] [role="listitem"]';
+  const seeFullSel = '[role="button"][aria-label="See full version history"]';
+  await page.waitForFunction(
+    (sels) => !!document.querySelector(sels.list) || !!document.querySelector(sels.seeFull),
+    { list: listSel, seeFull: seeFullSel },
+    { timeout: timeoutMs }
+  );
+  const seeFullBtn = page.locator(seeFullSel);
+  if (await seeFullBtn.count() && await seeFullBtn.first().isVisible()) {
+    await seeFullBtn.first().click();
+    await page.waitForSelector(listSel, { timeout: timeoutMs });
+  }
+}
+
+/**
  * Open the test doc, wait for it to settle, and open Version History by
  * clicking the toolbar clock button. Waits until at least one version
  * listitem exists and both From and To highlights have landed (init
@@ -68,9 +91,7 @@ export async function openDocAndVersionHistory(
   // window has focus — which would require `page.bringToFront()` and
   // cause the browser window to pop up on every test run.
   await page.locator('#docs-revisions-appbarbutton').click();
-  await page.waitForSelector('[aria-label="Versions"] [role="listitem"]', {
-    timeout: 15_000,
-  });
+  await ensureVersionsListVisible(page, 15_000);
   // Wait for the init-capture showrevision + both From and To highlights to
   // land (init capture is always 'both', so both must be present).
   await page.waitForFunction(
@@ -248,9 +269,7 @@ export async function exitVersionHistory(page: Page): Promise<void> {
  */
 export async function reenterVersionHistory(page: Page): Promise<void> {
   await page.locator('#docs-revisions-appbarbutton').click();
-  await page.waitForSelector('[aria-label="Versions"] [role="listitem"]', {
-    timeout: 10_000,
-  });
+  await ensureVersionsListVisible(page, 10_000);
   await page.waitForFunction(
     () => !!document.querySelector('.dr-version-from-btn.dr-btn-highlighted'),
     null,
