@@ -160,10 +160,16 @@ diff view and the "Total: N edits" counter.
 
 ### Gotcha: Missing `start` parameter
 
+Tracked in [issue #2](https://github.com/jshute96/GoogleDocsDiffRange/issues/2).
+
 Observed that Google Docs may sometimes fire a `showrevision` request without a `start` parameter (e.g., just `?end=81409`).
-- **Behavior:** If the `start` parameter is missing, our extension must still be able to apply overrides for both `start` and `end`.
-- This appears to be a Google Docs bug. It happens on large docs even without the extension. Once Docs gets into this state, all future showrevisions requests have no start parameter, and it sticks that way and never recovers. Clicking different revisions no longer updates the displayed diff.
-- We might be able to fix this, but we don't have accurate start numbers if Google stops passing them.
+- **Behavior:** If `start` is missing, our extension must still be able to apply overrides for both `start` and `end`.
+- Appears to be a Google Docs bug (reproduces without the extension).
+- Triggered on large docs.
+- Once in this state, all future `showrevision` requests omit `start` — sticky, never recovers.
+- Clicking different revisions no longer updates the displayed diff.
+- We might be able to fix this, but we don't have accurate `start` numbers if Google stops passing them.
+- **Code tie-in:** `rewriteRevisionUrl` uses `URLSearchParams.set()`, so when an override is present it will *insert* a `start` param even if Docs omitted one — the override value is trusted.
 
 ### Attempted Workarounds for Missing Start
 

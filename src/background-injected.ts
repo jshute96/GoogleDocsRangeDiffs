@@ -80,8 +80,14 @@ function revisionInterceptorFunc(): void {
   function rewriteRevisionUrl(url: string): string {
     if (url.indexOf('/showrevision?') === -1) return url;
 
-    const parts = url.split('?');
-    const searchParams = new URLSearchParams(parts[1] || '');
+    // Split on the first `?` only — `url.split('?')` would drop anything
+    // after a second `?` (rare, but cheap to guard against). URLSearchParams
+    // re-encodes the whole query on toString() (spaces → `+`, etc.), which
+    // is RFC-3986-compliant and accepted by Docs.
+    const qIdx = url.indexOf('?');
+    const base = qIdx === -1 ? url : url.substring(0, qIdx);
+    const query = qIdx === -1 ? '' : url.substring(qIdx + 1);
+    const searchParams = new URLSearchParams(query);
     const origStartStr = searchParams.get('start');
     const origEndStr = searchParams.get('end');
 
@@ -228,21 +234,29 @@ function revisionInterceptorFunc(): void {
 
     const os = origStartStr ?? '?';
     const oe = origEndStr ?? '?';
-    
-    let logPrefix = '[DiffRange] orig request: ';
-    if (!origStartStr) {
-      logPrefix = '[DiffRange] orig request (no start): ';
-    }
+
+    // Log branches: "orig request" when we're handling (captured or have
+    // overrides to apply), "unhandled" otherwise. A `(no start)` / `(no end)`
+    // suffix flags the Docs bug where showrevision URLs arrive with missing
+    // bounds (see notes-on-google-docs.md — "Gotcha: Missing start").
+    const missing: string[] = [];
+    if (!origStartStr) missing.push('no start');
+    if (!origEndStr) missing.push('no end');
+    const missingSuffix = missing.length ? ' (' + missing.join(', ') + ')' : '';
 
     if (capturedAs) {
-      console.log(logPrefix + os + ' to ' + oe + ' (capturing ' + capturedAs + ')');
+      console.log('[DiffRange] orig request' + missingSuffix + ': ' + os + ' to ' + oe + ' (capturing ' + capturedAs + ')');
     } else if (startVal || endVal) {
-      console.log(logPrefix + os + ' to ' + oe + ' (capturing neither)');
+      console.log('[DiffRange] orig request' + missingSuffix + ': ' + os + ' to ' + oe + ' (capturing neither)');
     } else {
-      console.log('[DiffRange] unhandled: ' + os + ' to ' + oe);
+      console.log('[DiffRange] unhandled' + missingSuffix + ': ' + os + ' to ' + oe);
     }
 
     if (startVal || endVal) {
+      // If we have an override value, apply it — including when Docs omitted
+      // the param from the original URL (see issue #2: Docs sometimes drops
+      // `start` on large docs, sticky until the tab is reloaded).
+      // https://github.com/jshute96/GoogleDocsDiffRange/issues/2
       if (startVal && /^\d+$/.test(startVal)) {
         searchParams.set('start', startVal);
       }
@@ -257,7 +271,7 @@ function revisionInterceptorFunc(): void {
         console.log('[DiffRange] rewrote to: ' + (newStart ?? 'undefined') + ' to ' + (newEnd ?? 'undefined'));
       }
 
-      url = parts[0] + '?' + searchParams.toString();
+      url = base + '?' + searchParams.toString();
     }
 
     return url;
