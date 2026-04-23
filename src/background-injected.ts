@@ -80,8 +80,10 @@ function revisionInterceptorFunc(): void {
   function rewriteRevisionUrl(url: string): string {
     if (url.indexOf('/showrevision?') === -1) return url;
 
-    const origStartStr = url.match(/[?&]start=(\d+)/)?.[1];
-    const origEndStr = url.match(/[?&]end=(\d+)/)?.[1];
+    const parts = url.split('?');
+    const searchParams = new URLSearchParams(parts[1] || '');
+    const origStartStr = searchParams.get('start');
+    const origEndStr = searchParams.get('end');
 
     // Record the highest `end` ever seen on any showrevision URL. The newest
     // version's range always ends at the doc's latest revision, so the max of
@@ -224,31 +226,38 @@ function revisionInterceptorFunc(): void {
     const startVal = document.body?.dataset.drOverrideStart ?? '';
     const endVal = document.body?.dataset.drOverrideEnd ?? '';
 
-    // Log: always "orig request" if we're handling (either captured or have
-    // overrides to apply), otherwise "unhandled".
     const os = origStartStr ?? '?';
     const oe = origEndStr ?? '?';
+    
+    let logPrefix = '[DiffRange] orig request: ';
+    if (!origStartStr) {
+      logPrefix = '[DiffRange] orig request (no start): ';
+    }
+
     if (capturedAs) {
-      console.log('[DiffRange] orig request: ' + os + ' to ' + oe + ' (capturing ' + capturedAs + ')');
+      console.log(logPrefix + os + ' to ' + oe + ' (capturing ' + capturedAs + ')');
     } else if (startVal || endVal) {
-      console.log('[DiffRange] orig request: ' + os + ' to ' + oe + ' (capturing neither)');
+      console.log(logPrefix + os + ' to ' + oe + ' (capturing neither)');
     } else {
       console.log('[DiffRange] unhandled: ' + os + ' to ' + oe);
     }
 
     if (startVal || endVal) {
       if (startVal && /^\d+$/.test(startVal)) {
-        url = url.replace(/([?&])start=\d+/, '$1start=' + startVal);
+        searchParams.set('start', startVal);
       }
       if (endVal && /^\d+$/.test(endVal)) {
-        url = url.replace(/([?&])end=\d+/, '$1end=' + endVal);
+        searchParams.set('end', endVal);
       }
 
-      const newStart = url.match(/[?&]start=(\d+)/)?.[1];
-      const newEnd = url.match(/[?&]end=(\d+)/)?.[1];
+      const newStart = searchParams.get('start');
+      const newEnd = searchParams.get('end');
+
       if (origStartStr !== newStart || origEndStr !== newEnd) {
-        console.log('[DiffRange] rewrote to: ' + newStart + ' to ' + newEnd);
+        console.log('[DiffRange] rewrote to: ' + (newStart ?? 'undefined') + ' to ' + (newEnd ?? 'undefined'));
       }
+
+      url = parts[0] + '?' + searchParams.toString();
     }
 
     return url;
