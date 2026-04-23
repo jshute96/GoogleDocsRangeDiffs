@@ -67,6 +67,23 @@ async function ensureVersionsListVisible(page: Page, timeoutMs: number): Promise
 }
 
 /**
+ * Wait for the extension's capture flow to finish after a click. The
+ * interceptor consumes `drCaptureMode` and `.dr-pending-capture` synchronously
+ * with the `showrevision` XHR it rewrites, so this normally converges within
+ * tens of milliseconds. Replaces blanket `waitForTimeout(1500)` sleeps that
+ * dominated test runtime.
+ */
+async function waitForCaptureSettled(page: Page, timeoutMs = 3000): Promise<void> {
+  await page.waitForFunction(
+    () =>
+      !document.body.dataset.drCaptureMode &&
+      !document.querySelector('.dr-pending-capture'),
+    null,
+    { timeout: timeoutMs }
+  );
+}
+
+/**
  * Open the test doc, wait for it to settle, and open Version History by
  * clicking the toolbar clock button. Waits until at least one version
  * listitem exists and both From and To highlights have landed (init
@@ -83,13 +100,12 @@ export async function openDocAndVersionHistory(
 ): Promise<Page> {
   const page = existingPage ?? (await context.newPage());
   await page.goto(docUrl, { waitUntil: 'domcontentloaded' });
-  // Docs never reaches networkidle; settle via an explicit wait.
-  await page.waitForTimeout(4000);
   // Click the toolbar clock icon to open Version History. We prefer this
   // over `Control+Alt+Shift+KeyH` because the keyboard shortcut only
   // reaches Docs' hidden text-event-target iframe handler when the OS
   // window has focus — which would require `page.bringToFront()` and
-  // cause the browser window to pop up on every test run.
+  // cause the browser window to pop up on every test run. Locator.click()
+  // auto-waits for the button to be actionable, so no blanket pre-sleep.
   await page.locator('#docs-revisions-appbarbutton').click();
   await ensureVersionsListVisible(page, 15_000);
   // Wait for the init-capture showrevision + both From and To highlights to
@@ -181,7 +197,8 @@ export async function expectOverrides(
 /**
  * Real-mouse click on the listitem at `idx` — triggers Docs' own mousedown
  * handlers AND our extension's capture-phase mousedown listener. Use this to
- * simulate a user selecting a version. Waits for the DOM to settle after.
+ * simulate a user selecting a version. Waits until the capture flow has
+ * consumed the click (drCaptureMode cleared, no pending-capture marker).
  */
 export async function clickListitem(page: Page, idx: number): Promise<void> {
   const item = page.locator('[aria-label="Versions"] [role="listitem"]').nth(idx);
@@ -194,13 +211,12 @@ export async function clickListitem(page: Page, idx: number): Promise<void> {
   } else {
     await item.click();
   }
-  await page.waitForTimeout(1500);
+  await waitForCaptureSettled(page);
 }
 
 /**
  * Click the "From here" button inside the listitem at `idx`. Waits for the
- * DOM to settle after — the click fires a showrevision and our capture flow
- * needs a moment to apply highlights.
+ * capture flow to settle.
  */
 export async function clickFrom(page: Page, idx: number): Promise<void> {
   await page
@@ -208,7 +224,7 @@ export async function clickFrom(page: Page, idx: number): Promise<void> {
     .nth(idx)
     .locator('.dr-version-from-btn')
     .click();
-  await page.waitForTimeout(1500);
+  await waitForCaptureSettled(page);
 }
 
 /** Same as `clickFrom` but for "To here". */
@@ -218,17 +234,17 @@ export async function clickTo(page: Page, idx: number): Promise<void> {
     .nth(idx)
     .locator('.dr-version-to-btn')
     .click();
-  await page.waitForTimeout(1500);
+  await waitForCaptureSettled(page);
 }
 
 /**
- * Click the "Diff full history" button (above the revisions list). Waits for
- * the DOM to settle — the click may fire one or two showrevisions and our
- * capture flow needs a moment to apply highlights.
+ * Click the "Diff full history" button (above the revisions list). The click
+ * may fire one or two showrevisions (click-away-then-back trick) and the
+ * capture flow applies highlights + overrides synchronously with each.
  */
 export async function clickDiffFullHistory(page: Page): Promise<void> {
   await page.locator('.dr-full-history-btn').click();
-  await page.waitForTimeout(2000);
+  await waitForCaptureSettled(page);
 }
 
 /**
@@ -245,7 +261,7 @@ export async function clickDateLabel(page: Page, idx: number): Promise<void> {
     .locator('textarea')
     .first()
     .click();
-  await page.waitForTimeout(1500);
+  await waitForCaptureSettled(page);
 }
 
 /**
