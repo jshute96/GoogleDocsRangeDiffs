@@ -248,9 +248,10 @@ export async function clickDiffFullHistory(page: Page): Promise<void> {
 }
 
 /**
- * Click the date/time label on the listitem at `idx`. The label area opens
- * the rename textarea when focused, but Docs also treats it as selecting the
- * version. The listitem-level mousedown listener should handle it as 'both'.
+ * Click the date/time label on the listitem at `idx`. The label area is a
+ * rename textarea that Docs would normally focus on click — the extension
+ * suppresses that focus so the click acts purely as a version selection,
+ * captured by the listitem-level mousedown listener as 'both'.
  */
 export async function clickDateLabel(page: Page, idx: number): Promise<void> {
   await page

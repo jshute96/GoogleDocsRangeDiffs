@@ -39,7 +39,13 @@
         '.dr-version-button.dr-btn-in-between:not(.dr-btn-highlighted) { background:#aecbfa; color:#1967d2; border-color:#8ab4f8; }' +
         '.dr-version-button.dr-btn-highlighted { background:#1a73e8; color:#fff; border-color:#1a73e8; }' +
         '.dr-full-history-row { padding:8px 16px; font-family:Google Sans,Roboto,sans-serif; }' +
-        '.dr-full-history-btn { padding:4px 10px; font-size:12px; }';
+        '.dr-full-history-btn { padding:4px 10px; font-size:12px; }' +
+        // Rename textareas show a text I-beam by default; since we've
+        // disabled click-to-rename, show the same pointer cursor the rest
+        // of the version row uses. Use :not(:focus) so that if rename is
+        // activated via the three-dots menu, the editing textarea gets the
+        // normal text caret again.
+        '[aria-label="Versions"] [role="listitem"] textarea:not(:focus) { cursor:pointer; }';
       document.head.appendChild(style);
     }
 
@@ -438,6 +444,13 @@
   // after click 1 and wipe the burst flag mid-way through click 2's window.
   let arrowBurstTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // Timer handle for the rename-focus-block window. A user mousedown on a
+  // version's rename textarea arms the block; any focusin on such a
+  // textarea within the window is blurred. Menu-driven rename (via the
+  // three-dots "Name this version" / "Rename") doesn't arm the block, so
+  // those programmatic focus calls still take effect.
+  let blockRenameFocusTimer: ReturnType<typeof setTimeout> | null = null;
+
   // Set up a delegated capture-phase mousedown listener on the versions list
   // so that pressing on a version directly (not via our From/To buttons) is
   // treated as capturing both bounds. We listen on mousedown rather than
@@ -467,6 +480,23 @@
       // textarea is already focused (user is actively editing the name).
       const ta = (e.target as Element).closest('textarea');
       if (ta && document.activeElement === ta) return;
+      // Suppress activation of the rename textarea on a plain click on the
+      // date/name label. preventDefault blocks the browser's default focus
+      // transfer; the focusin guard below (drBlockRenameFocus) additionally
+      // blurs the textarea if Docs calls .focus() programmatically during
+      // this click. The click still selects the version (Docs handles
+      // selection independently of textarea focus). Rename stays reachable
+      // via the three-dots menu ("Name this version" / "Rename"), which
+      // focuses the textarea without routing through mousedown.
+      if (ta) {
+        e.preventDefault();
+        document.body.dataset.drBlockRenameFocus = '1';
+        if (blockRenameFocusTimer !== null) clearTimeout(blockRenameFocusTimer);
+        blockRenameFocusTimer = setTimeout(() => {
+          delete document.body.dataset.drBlockRenameFocus;
+          blockRenameFocusTimer = null;
+        }, 300);
+      }
       // Skip programmatic events from the From / To button handlers and the
       // neighbor-click trick — they've already set up the correct capture
       // state themselves. (Note: .click() doesn't dispatch mousedown, so this
@@ -498,12 +528,8 @@
       // fetches for this revision), so skip this branch and fall through to
       // the standard pending-capture path so the fresh URL gets captured.
       if (!isArrow && isSelected(item) && captureForSelected(item, 'both')) {
-        // Don't block mousedown when the target is a textarea — we want Docs
-        // to still focus it so the user can edit the rename.
-        if (!ta) {
-          e.stopPropagation();
-          e.preventDefault();
-        }
+        e.stopPropagation();
+        e.preventDefault();
         return;
       }
       // Always cancel any stale capture and set up a fresh one for this click.
@@ -514,6 +540,21 @@
       if (oldPending) oldPending.classList.remove('dr-pending-capture');
       item.classList.add('dr-pending-capture');
       document.body.dataset.drCaptureMode = 'both';
+    }, true);
+
+    // Block Docs from programmatically focusing the rename textarea during
+    // the brief window armed by a user mousedown on it (see mousedown
+    // handler above). preventDefault on mousedown only stops the browser's
+    // default focus transfer — Docs calls .focus() explicitly, so we also
+    // need to blur any focus that lands on a version textarea while the
+    // block is armed. Focus from the three-dots menu happens outside this
+    // window, so rename via the menu still works.
+    list.addEventListener('focusin', (e: Event) => {
+      if (!document.body.dataset.drBlockRenameFocus) return;
+      const ta = (e.target as Element).closest('textarea');
+      if (!ta) return;
+      if (!ta.closest('[role="listitem"]')) return;
+      (ta as HTMLTextAreaElement).blur();
     }, true);
   }
 

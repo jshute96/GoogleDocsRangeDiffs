@@ -18,6 +18,11 @@ This extension adds diff-between-versions functionality to Google Docs.
    version and **To here** on the newest in one click.
 5. Switching the dropdown (e.g., "All versions" → "Named versions") resets
    the range selection.
+6. Clicking on a version's date/name acts only as selection — it no longer
+   opens the rename text field. To rename a version, use the three-dots
+   menu's **Name this version** / **Rename** item. This fixes some confusing
+   and glitchy behavior where those clicks open a poorly-functioning edit box
+   while also selecting the revision.
 
 ### Console API
 

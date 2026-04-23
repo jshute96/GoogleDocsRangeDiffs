@@ -57,11 +57,17 @@ test('click an unselected version: selects it, From+To land on it', async ({ pag
   await expectRange(page, 2, 2);
 });
 
-test('click the date/label (opens rename textarea) also captures range', async ({ page }) => {
+test('click the date/label captures range and does NOT open rename', async ({ page }) => {
   await clickDateLabel(page, 1);
   const state = await getRangeState(page);
   expect(state.selectedIdx).toBe(1);
   await expectRange(page, 1, 1);
+  // Rename activation is suppressed: the textarea should not be the focused
+  // element. (Rename stays reachable via the three-dots menu.)
+  const activeIsTextarea = await page.evaluate(
+    () => document.activeElement?.tagName === 'TEXTAREA'
+  );
+  expect(activeIsTextarea).toBe(false);
 });
 
 test('From on older item: range spans From..existing-To', async ({ page }) => {

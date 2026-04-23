@@ -98,6 +98,22 @@ resulting URL.
 - Prefer `mousedown` for selection-aware logic. Skip only when the
   textarea is already focused (user is mid-edit), not just because the
   target is a textarea — every listitem has one.
+- The rename activation on label click is annoying, so the extension
+  suppresses it in two layers:
+  - `preventDefault()` on the mousedown — blocks the browser's default
+    focus transfer to the textarea.
+  - A capture-phase `focusin` listener on the versions list — if Docs
+    programmatically calls `.focus()` on a version's textarea during a
+    short post-mousedown window (flagged via `body.dataset.drBlockRenameFocus`),
+    we immediately `blur()` it.
+- Both layers are needed because Docs doesn't rely on the default
+  mousedown focus behavior — it calls `.focus()` explicitly, so
+  `preventDefault` alone isn't enough.
+- The block is only armed by a user mousedown on the textarea. Rename
+  via the three-dots menu ("Name this version" / "Rename") focuses the
+  textarea outside that window and still works.
+- Selection + `showrevision` are unaffected — Docs drives them
+  independently of the textarea's focus state.
 
 ### Version type dropdown
 
