@@ -239,15 +239,15 @@
     // Prefer an adjacent revision (next-older, then next-newer) over the
     // topmost one: clicking the top item scrolls the list and sometimes
     // doesn't scroll back properly.
-    const all = document.querySelectorAll('[aria-label="Versions"] [role="listitem"]');
+    const items = document.querySelectorAll('[aria-label="Versions"] [role="listitem"]');
     let idx = -1;
-    for (let i = 0; i < all.length; i++) {
-      if (all[i] === item) { idx = i; break; }
+    for (let i = 0; i < items.length; i++) {
+      if (items[i] === item) { idx = i; break; }
     }
     let neighbor: HTMLElement | null = null;
     if (idx !== -1) {
-      if (idx + 1 < all.length) neighbor = all[idx + 1] as HTMLElement;
-      else if (idx - 1 >= 0) neighbor = all[idx - 1] as HTMLElement;
+      if (idx + 1 < items.length) neighbor = items[idx + 1] as HTMLElement;
+      else if (idx - 1 >= 0) neighbor = items[idx - 1] as HTMLElement;
     }
     if (!neighbor) return false;
 
