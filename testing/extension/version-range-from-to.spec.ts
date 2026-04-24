@@ -79,6 +79,26 @@ test('with a range selected, clicking an item (inside or outside) resets to from
   await expectRangeAndContents(page, diffResponses, recorder, 2, 2);
 });
 
+test('click on already-selected listitem: highlights stay on target, not neighbor', async ({ page, diffResponses }) => {
+  // Regression: captureForSelected clicks a neighbor to force a fresh
+  // showrevision when the user clicks on the already-selected tile. Docs
+  // moves SelectedTile onto the neighbor as a side effect, and the
+  // MutationObserver's restoreBothOnSelectedIfFlagged would follow
+  // SelectedTile and relocate From/To highlights to the neighbor. The fix
+  // pins the anchor to whichever listitem already holds both highlights,
+  // falling back to SelectedTile only on DOM-wipe.
+  //
+  // Scenario: clickFrom(3) selects item 3 (range 3..0, divergent). Then
+  // clickListitem(3) routes through captureForSelected(item3, 'both'):
+  // tookBoth=true, rangeChanged=true → drBothOnSelected=1 set, neighbor
+  // click fires. Highlights must end up on item 3 (the target), not on
+  // item 4 (the neighbor our click-away picks).
+  await clickFrom(page, 3);
+  await expectRangeAndContents(page, diffResponses, recorder, 3, 0);
+  await clickListitem(page, 3);
+  await expectRangeAndContents(page, diffResponses, recorder, 3, 3);
+});
+
 test('URL rewrite: setting From=item[2], To=item[0] sends start=item2.start, end=item0.end', async ({ page, logs, diffResponses }) => {
   // Discover the natural (start, end) range of the first few items.
   // Item 0 is already SelectedTile from init capture — clicking it wouldn't

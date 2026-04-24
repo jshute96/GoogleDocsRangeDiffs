@@ -393,13 +393,22 @@ classes disappear with the old nodes.
   `body.dataset.drBothOnSelected = '1'` when From and To land on the
   same just-selected listitem (`tookBoth`).
 - `injectVersionButtons` calls `restoreBothOnSelectedIfFlagged` each
-  observer tick and, if the flag is set, re-applies From/To to the
-  current SelectedTile.
+  observer tick and, if the flag is set, pins both highlights to a
+  single anchor listitem.
+- Anchor selection: prefer the listitem that currently holds both
+  From and To highlights; only fall back to SelectedTile when no
+  item holds both. This matters because `captureForSelected` clicks
+  a neighbor to force a fresh showrevision, which makes Docs move
+  SelectedTile onto the neighbor — but the intended anchor is still
+  the original target (where we synchronously placed the highlights
+  before the neighbor click). Falling back to SelectedTile only on
+  wipe preserves the arrow-expand restoration path.
 - Cleared on any divergent capture (From/To diverge) and on
   `resetRevisionOverrides`. `handleFullHistoryClick` clears it
   explicitly since it sets a wide split range.
-- Idempotent with a fast-path early-out when highlights are already
-  correct — avoids DOM churn on steady-state observer ticks.
+- Idempotent with a fast-path early-out when the anchor already has
+  both highlights and no strays exist — avoids DOM churn on
+  steady-state observer ticks.
 
 **Known limitation — split ranges don't persist through expand:**
 

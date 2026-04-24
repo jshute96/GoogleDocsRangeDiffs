@@ -119,37 +119,52 @@
   }
 
   // If body.dataset.drBothOnSelected is set (the last capture landed From and
-  // To on the same, just-selected listitem), re-apply From/To highlights to
-  // whichever listitem currently wears the SelectedTile class. Handles the
-  // case where clicking the arrow to expand sub-versions causes Docs to wipe
-  // and re-render our injected buttons — the highlights go with the old DOM
-  // nodes, so we restore them on the fresh ones. Idempotent: if highlights
-  // are already correct, this re-applies the same classes. The flag persists
-  // until a capture diverges From/To or overrides reset.
+  // To on the same listitem), make sure both highlights stay together on one
+  // anchor item. Handles DOM-wipe cases (e.g. arrow-expand re-renders our
+  // injected buttons) by re-applying the highlights to the fresh nodes.
+  //
+  // Anchor selection is critical: captureForSelected clicks a *neighbor* to
+  // force a fresh showrevision after a click on the already-selected tile,
+  // which makes Docs move SelectedTile onto the neighbor. The intended
+  // highlight anchor is still the original target (where we synchronously
+  // placed the highlights before the neighbor click), NOT SelectedTile. So:
+  //   1. Prefer the listitem that currently holds both From and To — that's
+  //      the intended anchor, whether or not it wears SelectedTile.
+  //   2. Only fall back to SelectedTile when no item holds both (e.g. a
+  //      DOM-wipe dropped the highlights entirely).
+  // The flag persists until a capture diverges From/To or overrides reset.
   function restoreBothOnSelectedIfFlagged(): void {
     if (!document.body.dataset.drBothOnSelected) return;
     const items = document.querySelectorAll(
       '[aria-label="Versions"] [role="listitem"]'
     );
-    let selected: Element | null = null;
+    let anchor: Element | null = null;
     for (let i = 0; i < items.length; i++) {
-      if (isSelected(items[i])) { selected = items[i]; break; }
+      const hasFrom = !!items[i].querySelector('.dr-version-from-btn.dr-btn-highlighted');
+      const hasTo = !!items[i].querySelector('.dr-version-to-btn.dr-btn-highlighted');
+      if (hasFrom && hasTo) { anchor = items[i]; break; }
     }
-    if (!selected) return;
-    // Fast path: highlights already correct on the selected tile and no
-    // stray highlights elsewhere — nothing to do. Saves DOM churn on the
-    // steady-state observer ticks that arrive when the list isn't changing.
-    const fromOk = !!selected.querySelector('.dr-version-from-btn.dr-btn-highlighted');
-    const toOk = !!selected.querySelector('.dr-version-to-btn.dr-btn-highlighted');
-    if (fromOk && toOk) {
-      const stray = Array.from(document.querySelectorAll('.dr-btn-highlighted'))
-        .some(b => !selected!.contains(b));
-      if (!stray) return;
+    if (!anchor) {
+      for (let i = 0; i < items.length; i++) {
+        if (isSelected(items[i])) { anchor = items[i]; break; }
+      }
     }
+    if (!anchor) return;
+    // Fast path: anchor already has both and no stray highlights elsewhere —
+    // nothing to do. Saves DOM churn on steady-state observer ticks.
+    const fromBtn = anchor.querySelector('.dr-version-from-btn');
+    const toBtn = anchor.querySelector('.dr-version-to-btn');
+    const fromOk = !!fromBtn?.classList.contains('dr-btn-highlighted');
+    const toOk = !!toBtn?.classList.contains('dr-btn-highlighted');
+    const stray = Array.from(document.querySelectorAll('.dr-btn-highlighted'))
+      .some(b => !anchor!.contains(b));
+    if (fromOk && toOk && !stray) return;
     const hl = document.querySelectorAll('.dr-btn-highlighted');
-    for (let i = 0; i < hl.length; i++) hl[i].classList.remove('dr-btn-highlighted');
-    selected.querySelector('.dr-version-from-btn')?.classList.add('dr-btn-highlighted');
-    selected.querySelector('.dr-version-to-btn')?.classList.add('dr-btn-highlighted');
+    for (let i = 0; i < hl.length; i++) {
+      if (!anchor.contains(hl[i])) hl[i].classList.remove('dr-btn-highlighted');
+    }
+    fromBtn?.classList.add('dr-btn-highlighted');
+    toBtn?.classList.add('dr-btn-highlighted');
   }
 
   // True when Docs has marked this listitem as the currently-displayed
