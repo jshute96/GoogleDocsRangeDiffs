@@ -31,6 +31,9 @@ import {
   switchDropdown,
   lastRewroteRange,
   resetRange,
+  setSimulateMissingStart,
+  setDisableMissingStartWorkaround,
+  clearPerListitemCache,
   type DiffContents,
   type DiffResponseBuf,
 } from './helpers';
@@ -116,6 +119,12 @@ test.beforeEach(async ({ page, logs }) => {
   // Clear logs BEFORE the reset so the init-capture entries from this reset
   // are the only ones the test sees.
   logs.clear();
+  // Clear any simulation flags that a prior test may have left on — resetRange
+  // exits and re-enters VH, which fires init-capture; we want init-capture to
+  // run under normal (non-simulated) conditions so the baseline range is
+  // populated correctly before any simulation test enables its flags.
+  await setSimulateMissingStart(page, false);
+  await setDisableMissingStartWorkaround(page, false);
   await resetRange(page);
 });
 
@@ -307,7 +316,7 @@ test('Diff full history (item[0] already selected): spans full list, item[0] sta
 
   // Pull the doc's max revision out of the init-capture "orig request" log
   // (item[0]'s natural end = doc's latest revision).
-  const initLog = logs.all().find((l) => l.includes('orig request') && l.includes('capturing both'));
+  const initLog = logs.all().find((l) => l.includes('orig request') && l.includes('mode=both'));
   const initM = initLog?.match(/orig request:\s*(\d+)\s*to\s*(\d+)/);
   if (!initM) throw new Error('no init-capture orig request in logs');
   const maxRev = Number(initM[2]);
@@ -338,7 +347,7 @@ test('Diff full history (item[0] already selected): spans full list, item[0] sta
 });
 
 test('Diff full history (item[0] not selected): spans full list, item[0] becomes selected', async ({ page, logs, diffResponses }) => {
-  const initLog = logs.all().find((l) => l.includes('orig request') && l.includes('capturing both'));
+  const initLog = logs.all().find((l) => l.includes('orig request') && l.includes('mode=both'));
   const initM = initLog?.match(/orig request:\s*(\d+)\s*to\s*(\d+)/);
   if (!initM) throw new Error('no init-capture orig request in logs');
   const maxRev = Number(initM[2]);
@@ -390,6 +399,110 @@ test('From=oldest, To=second-oldest: before empty, after non-empty', async ({ pa
   expect(after.length).toBeGreaterThan(0);
 });
 
+// --- Missing-start workaround (issue #2) ---
+//
+// Docs sometimes fires showrevision URLs without `start=` on large docs — a
+// sticky bug. The extension simulates this via body.dataset.drSimulateMissingStart
+// so we can test both the broken baseline (workaround disabled) and the fix
+// (workaround enabled). These tests must run after the content-chain sweep so
+// recordedVersions is populated for the content comparisons.
+
+test('missing-start simulation without workaround: mid-range diff contents are wrong', async ({ page, diffResponses }) => {
+  // Turn on simulation and disable the workaround. Clicking a non-init version
+  // should produce a diff that doesn't match that version's expected contents:
+  // with `start` stripped and no workaround, the interceptor can't learn a new
+  // start, so overrides stay stuck at init-capture's (item[0]'s) range. The
+  // URL gets rewritten with that stale start — a wrong range — and Docs
+  // returns contents that don't match item 2's true diff.
+  await setSimulateMissingStart(page, true);
+  await setDisableMissingStartWorkaround(page, true);
+
+  await clickListitem(page, 2);
+  const { before, after } = await extractDiffContents(page, diffResponses, 10000);
+
+  // The contents should NOT match item 2's expected range. We don't assert
+  // what they ARE (depends on what Docs does with a stale-start URL), only
+  // that the bug is observable.
+  const item2Matches =
+    after === recordedVersions[2].after &&
+    before === (recordedVersions[3]?.after ?? '');
+  expect(item2Matches, 'broken baseline should not produce item 2\'s correct diff').toBe(false);
+});
+
+test('missing-start workaround (fast path): neighbor cached, mid-range diff is correct', async ({ page, diffResponses }) => {
+  // With the sweep having cached each listitem's natural end, clicking a
+  // mid-range version under simulation triggers the fast path — interceptor
+  // finds the next-older listitem's cached end and infers start directly
+  // without dancing.
+  await setSimulateMissingStart(page, true);
+
+  await clickListitem(page, 2);
+  await expectRangeAndContents(page, diffResponses, 2, 2);
+});
+
+test('missing-start workaround (dance path): clears cache, drives neighbor-reclick dance', async ({ page, diffResponses, logs }) => {
+  // Wipe the per-listitem cache the sweep populated so the workaround can't
+  // take the fast path. It must schedule the dance via drMissingStartDance,
+  // the content script clicks the next-older neighbor (learning its end) and
+  // then re-clicks the target (which now lands the correct range).
+  await clearPerListitemCache(page);
+  await setSimulateMissingStart(page, true);
+
+  await clickListitem(page, 2);
+  await expectRangeAndContents(page, diffResponses, 2, 2);
+
+  // Verify the dance actually ran — dance-specific log lines should appear.
+  const log = logs.all();
+  expect(log.some((l) => l.includes('scheduling dance')), 'dance was scheduled').toBe(true);
+  expect(log.some((l) => l.includes('re-clicking target')), 'target was re-clicked').toBe(true);
+});
+
+test('missing-start workaround: clicking the oldest version uses start=1, before is empty', async ({ page, diffResponses, logs }) => {
+  // No neighbor exists below the oldest listitem, so the workaround short-
+  // circuits to start=1 without consulting the neighbor-end cache or
+  // scheduling the dance. We don't clearPerListitemCache here since the
+  // oldest-branch doesn't read it.
+  await setSimulateMissingStart(page, true);
+
+  const n = recordedItemCount;
+  expect(n).toBeGreaterThan(1);
+  await clickListitem(page, n - 1);
+  await expectRange(page, n - 1, n - 1);
+  const { before } = await extractDiffContents(page, diffResponses, 10000);
+  expect(before).toBe('');
+
+  // Sanity: the workaround logged it used start=1 for the oldest item.
+  expect(logs.all().some((l) => l.includes('is oldest') && l.includes('start=1')), 'oldest-listitem branch fired').toBe(true);
+});
+
+test('missing-start workaround: From/To on missing-start version preserves the other endpoint', async ({ page, diffResponses }) => {
+  // A user "From here" click on a missing-start version must not collapse
+  // the range to From=To=target. The dance re-click should run with the
+  // stashed 'from' mode so the existing To endpoint survives.
+  await clearPerListitemCache(page);
+  await setSimulateMissingStart(page, true);
+
+  // Init leaves From=To=0. Click "From here" on item 3 — the interceptor
+  // can't read start (simulation), schedules the dance, and the dance's
+  // re-click applies the stashed 'from' mode rather than forcing 'both'.
+  // Result: From=3, To=0 (not From=3, To=3).
+  await clickFrom(page, 3);
+  await expectRangeAndContents(page, diffResponses, 3, 0);
+});
+
+test('missing-start workaround: content chain holds over several mid-range clicks', async ({ page, diffResponses }) => {
+  // Click a few mid-range versions under simulation and verify each one
+  // produces the correct diff contents (matching what the sweep recorded).
+  // Exercises the full loop: each click fast-paths off the prior click's
+  // cached end.
+  await setSimulateMissingStart(page, true);
+
+  for (const idx of [1, 2, 3]) {
+    await clickListitem(page, idx);
+    await expectRangeAndContents(page, diffResponses, idx, idx);
+  }
+});
+
 test('URL rewrite: setting From=item[2], To=item[0] sends start=item2.start, end=item0.end', async ({ page, logs, diffResponses }) => {
   // Discover the natural (start, end) range of the first few items.
   // Item 0 is already SelectedTile from init capture — clicking it wouldn't
@@ -397,7 +510,7 @@ test('URL rewrite: setting From=item[2], To=item[0] sends start=item2.start, end
   // For items 1+, click each and read the "orig request" line.
   const count = Math.min(4, await page.locator('[aria-label="Versions"] [role="listitem"]').count());
   const ranges: Array<{ start: number; end: number }> = [];
-  const initLog = logs.all().find((l) => l.includes('orig request') && l.includes('capturing both'));
+  const initLog = logs.all().find((l) => l.includes('orig request') && l.includes('mode=both'));
   const initM = initLog?.match(/orig request:\s*(\d+)\s*to\s*(\d+)/);
   if (!initM) throw new Error('no init-capture orig request in logs');
   ranges[0] = { start: Number(initM[1]), end: Number(initM[2]) };

@@ -27,8 +27,8 @@ One-line descriptions of every source file, grouped by directory.
 | `src/manifest.json` | Manifest V3 config: permissions, content scripts, service worker |
 | `src/types.d.ts` | Global type declarations: Window extensions, service worker globals |
 | `src/background.ts` | Service worker — handles `injectRevisionInterceptor` message, loads `background-injected.js` |
-| `src/background-injected.ts` | MAIN world: XHR/fetch interceptor, max-revision tracking, `showRevisions()`, `openVersionHistory()` |
-| `src/content-revisions.ts` | Content script: injects From/To + Diff-full-history buttons and wires the selection-capture flow |
+| `src/background-injected.ts` | MAIN world: XHR/fetch interceptor, max-revision tracking, missing-start workaround, `showRevisions()`, `openVersionHistory()`, `drSimulateMissingStart()` |
+| `src/content-revisions.ts` | Content script: injects From/To + Diff-full-history buttons, wires selection-capture flow, runs the missing-start dance |
 
 ## Scripts (`scripts/`)
 
@@ -49,7 +49,7 @@ One-line descriptions of every source file, grouped by directory.
 | `testing/extension/playwright.config.ts` | Playwright config for live tests with extension |
 | `testing/extension/fixtures.ts` | Worker-scoped fixtures: CDP context, shared `page` with VH open, `logs`, `diffResponses` buffers |
 | `testing/extension/smoke.spec.ts` | Smoke test: verifies extension UI is injected into the shared VH page |
-| `testing/extension/helpers.ts` | Helpers: open doc + VH, range-state reads, click actions, reset/reload, `showrevision` response parser + diff-content extractor |
+| `testing/extension/helpers.ts` | Extension test helpers: doc/VH setup, range-state reads, click actions, showrevision parser, missing-start toggles |
 | `testing/extension/version-range.spec.ts` | Behavioral tests: init capture, From/To, range reset, dropdown, re-entry, full-history |
 | `testing/no-extension/playwright.config.ts` | Playwright config for live tests without extension |
 | `testing/no-extension/fixtures.ts` | Worker-scoped fixtures: CDP context + shared `page` with VH open |
@@ -60,6 +60,7 @@ One-line descriptions of every source file, grouped by directory.
 | File | Description |
 |------|-------------|
 | `file-index.md` | This file — one-line descriptions of every source file |
+| `fix-google-docs-start-version-bug.md` | Issue #2: Docs missing-`start` bug — description, workaround design, tests, interactive testing |
 | `notes-on-google-docs.md` | Google Docs DOM structure, event handling, network requests, extension architecture |
 | `notes-on-testing.md` | Testing setup, Google login challenges, what works (connectOverCDP) and what doesn't |
 | `notes-on-ui-debugging.md` | Playwright+CDP tips for interactive debug scripts: extension reload, DOM probing, style source lookup |

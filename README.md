@@ -23,6 +23,13 @@ This extension adds diff-between-versions functionality to Google Docs.
    menu's **Name this version** / **Rename** item. This fixes some confusing
    and glitchy behavior where those clicks open a poorly-functioning edit box
    while also selecting the revision.
+7. Works around a Google Docs bug that breaks version navigation on large
+   docs: Docs sometimes drops the `start` parameter from its revision-diff
+   requests, leaving every version showing the same diff. The extension
+   detects the missing `start`, infers it from the adjacent older version's
+   range, and restores correct navigation. See
+   [`docs/fix-google-docs-start-version-bug.md`](docs/fix-google-docs-start-version-bug.md).
+   for more details.
 
 ### Console API
 
@@ -30,6 +37,10 @@ From the browser console on a Google Docs page:
 
 - `showRevisions(start, end)` — set a revision range and show the diff
 - `openVersionHistory()` — open the Version History panel programmatically
+- `drSimulateMissingStart(true/false)` — simulate the Docs bug that drops
+  the `start` param from revision URLs (for testing the workaround)
+- `drDisableMissingStartWorkaround(true/false)` — disable the workaround
+  to see the broken baseline
 
 ## Installation
 

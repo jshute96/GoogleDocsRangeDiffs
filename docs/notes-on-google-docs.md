@@ -208,33 +208,9 @@ diff view and the "Total: N edits" counter.
     - Otherwise → both sides.
 - The main doc area is **canvas-rendered**, so diff text cannot be read from the DOM. Tests that need the rendered content parse the `showrevision` JSON instead (see `parseShowRevisionBody` in `testing/extension/helpers.ts`).
 
-### Gotcha: Missing `start` parameter
+### Gotcha: Missing `start` parameter (issue #2)
 
-Tracked in [issue #2](https://github.com/jshute96/GoogleDocsDiffRange/issues/2).
-
-Observed that Google Docs may sometimes fire a `showrevision` request without a `start` parameter (e.g., just `?end=81409`).
-- **Behavior:** If `start` is missing, our extension must still be able to apply overrides for both `start` and `end`.
-- Appears to be a Google Docs bug (reproduces without the extension).
-- Triggered on large docs.
-- Once in this state, all future `showrevision` requests omit `start` — sticky, never recovers.
-- Clicking different revisions no longer updates the displayed diff.
-- We might be able to fix this, but we don't have accurate `start` numbers if Google stops passing them.
-- **Code tie-in:** `rewriteRevisionUrl` uses `URLSearchParams.set()`, so when an override is present it will *insert* a `start` param even if Docs omitted one — the override value is trusted.
-
-### Attempted Workarounds for Missing Start
-
-We attempted to recover the missing `start` parameter to allow range capturing even when Docs doesn't send it. We haven't got this working yet.
-
-#### 1. Assume `start = end`
-- **Approach**: If `start` is missing, treat it as equal to `end`.
-- **Result**: Works to prevent extension from getting stuck in a state where it can't force a range. But it results in a point request (range of length 0) for that version, rather than a true diff against the previous version.
-
-#### 2. Infer `start` from Next Older Version ("The Dance")
-- **Approach**: Infer `start_N = end_{N+1} + 1` by reading the `end` of the next older version in the list. If not cached, programmatically click the next item to force a fetch, learn its `end`, and then click back to the target item.
-- **Result**: Failed to work reliably in initial attempts.
-  - **Race Condition**: The interceptor (MAIN world) removes the pending capture class before the content script observer (Isolated world) can run, making it hard to identify the target element.
-  - **Observer Limits**: The `MutationObserver` in the content script was not watching attributes on `document.body`, so it missed the dataset signals from the interceptor.
-  - **Capture Suppression**: Suppressing capture on the next item click prevented caching its `end`, stalling the dance. Removing suppression caused highlights to flicker.
+Google Docs sometimes drops `start` from `showrevision` URLs on large docs — sticky, breaks revision navigation. The extension detects and works around it. See [`fix-google-docs-start-version-bug.md`](fix-google-docs-start-version-bug.md) for the bug description, workaround design, assumptions, test coverage, and interactive testing notes.
 
 ### Auto-fired showrevision (no click)
 

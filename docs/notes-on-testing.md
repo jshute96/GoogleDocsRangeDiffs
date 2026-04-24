@@ -180,6 +180,30 @@ npm run test:no-extension    # no-extension only
   back skip the `before` assertion unless the target is the oldest
   item (where `before === ''` is still well-defined).
 
+### Missing-start workaround tests (issue #2)
+
+Automated-test helpers (`setSimulateMissingStart`,
+`setDisableMissingStartWorkaround`, `clearPerListitemCache`), the
+`waitForCaptureSettled` dance-aware check, and test coverage are all
+documented in
+[`fix-google-docs-start-version-bug.md`](fix-google-docs-start-version-bug.md).
+
+#### Manual / interactive testing flags
+
+Two DevTools-callable toggles let you reproduce the missing-start Docs
+bug against any real doc without editing a huge one:
+
+- `drSimulateMissingStart(true)` — strips `start` from every showrevision
+  URL (outgoing + the interceptor's reading), mirroring the real bug.
+- `drDisableMissingStartWorkaround(true)` — short-circuits the fix.
+
+Combine to see the broken baseline; turn off
+`drDisableMissingStartWorkaround` to watch the workaround repair it live.
+Expected log sequence for the dance path is in
+[`fix-google-docs-start-version-bug.md`](fix-google-docs-start-version-bug.md).
+Reload the extension + the doc after `npm run build` so the toggles
+surface on `window`.
+
 ### Test fixtures
 
 The fixtures in `testing/extension/fixtures.ts` and
