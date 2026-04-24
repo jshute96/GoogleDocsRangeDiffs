@@ -365,6 +365,123 @@ export function lastRewroteRange(logs: string[]): { start: number; end: number }
   return null;
 }
 
+/** Reconstructed plain-text content of a diff view's before/after sides. */
+export interface DiffContents {
+  before: string;
+  after: string;
+}
+
+/** One parsed showrevision response: its rev range and extracted contents. */
+export interface DiffResponseEntry {
+  start: number;
+  end: number;
+  contents: DiffContents;
+}
+
+/** Accessor for a live buffer of showrevision responses, injected as a fixture. */
+export interface DiffResponseBuf {
+  all(): ReadonlyArray<DiffResponseEntry>;
+  clear(): void;
+}
+
+/**
+ * Parse a `showrevision` response body and reconstruct before/after plain-text
+ * content of the displayed diff.
+ *
+ * Format (reverse-engineered — see docs/notes-on-google-docs.md):
+ *   Body starts with XSSI prefix `)]}'\n` then JSON.
+ *   `data.chunkedSnapshot: Array<Array<Op>>`. Each chunk carries:
+ *     - `{ty:"is", ibi:N, s:"text..."}` — insert string `s` at positions
+ *       starting at `ibi` (1-based). Multiple may exist; positions may be sparse
+ *       (paragraph markers don't occupy a character slot in `s`).
+ *     - `{ty:"as", st:"revision_diff", si, ei, sm:{revdiff_dt}}` — apply diff
+ *       annotation over positions `[si..ei]` inclusive. `revdiff_dt=1` = inserted
+ *       (post-change only), `revdiff_dt=2` = deleted (pre-change only).
+ *     - Other `as` styles (paragraph, text, heading, ...) are ignored for
+ *       content reconstruction; they don't change the visible text stream.
+ *
+ * Reconstruction: iterate positions in order. Unchanged positions go to both
+ * sides; insert positions to `after` only; delete positions to `before` only.
+ */
+export function parseShowRevisionBody(body: string): DiffContents {
+  const jsonStr = body.replace(/^\)\]\}'\n?/, '');
+  const data = JSON.parse(jsonStr);
+  const chunks: unknown[] = Array.isArray(data?.chunkedSnapshot) ? data.chunkedSnapshot : [];
+  // Merge all chunks' ops into a single position map and diff list, then sort
+  // once at the end. Per-chunk sorting would only be correct if chunks are in
+  // document order with non-overlapping position ranges — not guaranteed by
+  // the format.
+  const positions = new Map<number, string>();
+  const diffs: Array<{ si: number; ei: number; dt: number }> = [];
+  for (const rawChunk of chunks) {
+    const chunk = Array.isArray(rawChunk) ? rawChunk : [];
+    for (const op of chunk as Array<Record<string, unknown>>) {
+      if (op.ty === 'is' && typeof op.s === 'string' && typeof op.ibi === 'number') {
+        const s = op.s as string;
+        const ibi = op.ibi as number;
+        for (let k = 0; k < s.length; k++) positions.set(ibi + k, s[k]);
+      } else if (op.ty === 'as' && op.st === 'revision_diff') {
+        const si = typeof op.si === 'number' ? op.si : -1;
+        const ei = typeof op.ei === 'number' ? op.ei : -1;
+        const sm = op.sm as Record<string, unknown> | undefined;
+        const dt = sm && typeof sm.revdiff_dt === 'number' ? (sm.revdiff_dt as number) : 0;
+        if (si >= 0 && ei >= si && (dt === 1 || dt === 2)) diffs.push({ si, ei, dt });
+      }
+    }
+  }
+  const dtAt = (p: number): number => {
+    for (const d of diffs) if (p >= d.si && p <= d.ei) return d.dt;
+    return 0;
+  };
+  const before: string[] = [];
+  const after: string[] = [];
+  const sortedPositions = Array.from(positions.keys()).sort((a, b) => a - b);
+  for (const p of sortedPositions) {
+    const ch = positions.get(p)!;
+    const dt = dtAt(p);
+    if (dt === 2) before.push(ch);
+    else if (dt === 1) after.push(ch);
+    else {
+      before.push(ch);
+      after.push(ch);
+    }
+  }
+  return { before: before.join(''), after: after.join('') };
+}
+
+/**
+ * Extract the diff contents displayed by the current selection. Reads the
+ * current revision overrides (`body.dataset.drOverrideStart/End`) and returns
+ * the latest matching parsed response from the `diffResponses` buffer.
+ *
+ * Call this only after the capture flow has settled (the test helpers already
+ * wait for that via `waitForCaptureSettled`).
+ */
+export async function extractDiffContents(
+  page: Page,
+  diffResponses: DiffResponseBuf,
+  timeoutMs = 5000
+): Promise<DiffContents> {
+  const { start, end } = await page.evaluate(() => ({
+    start: Number(document.body.dataset.drOverrideStart || '0'),
+    end: Number(document.body.dataset.drOverrideEnd || '0'),
+  }));
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const entries = diffResponses.all();
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const e = entries[i];
+      if (e.start === start && e.end === end) return e.contents;
+    }
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  const entries = diffResponses.all();
+  throw new Error(
+    `extractDiffContents: no showrevision response matching ${start}..${end} ` +
+    `(saw ${entries.length} responses: ${entries.map((e) => `${e.start}..${e.end}`).join(', ')})`
+  );
+}
+
 /**
  * Reload the GoogleDocsDiffRange extension via chrome://extensions. Useful
  * at the start of a test run to pick up a freshly built dist/. Enables

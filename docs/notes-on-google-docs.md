@@ -190,6 +190,24 @@ Key parameters:
 The response contains the revision diff data that populates the left-side
 diff view and the "Total: N edits" counter.
 
+### Response body format (used for content-check tests)
+
+- Body starts with an XSSI prefix `)]}'\n` followed by JSON.
+- Top level: `{ chunkedSnapshot: Array<Array<Op>>, userInfo, suggestionColors, ... }`.
+- Each chunk is an array of ops we care about:
+  - `{ ty: "is", ibi: N, s: "..." }` — **insert string** `s` into positions starting at `ibi` (1-based).
+  - `{ ty: "as", st: "revision_diff", si, ei, sm: { revdiff_dt } }` — mark positions `[si..ei]` (inclusive) as:
+    - `revdiff_dt: 1` → **inserted** (in "after" only, highlighted green).
+    - `revdiff_dt: 2` → **deleted** (in "before" only, strikethrough).
+  - Other `as` styles (`paragraph`, `text`, `heading`, ...) describe formatting and do not affect the text stream for diff reconstruction.
+- Reconstruction for before/after text content:
+  - Build a sparse `position → char` map from all `is` ops.
+  - Iterate positions in ascending order. For each position:
+    - If inside a `revdiff_dt:2` range → `before` only.
+    - If inside a `revdiff_dt:1` range → `after` only.
+    - Otherwise → both sides.
+- The main doc area is **canvas-rendered**, so diff text cannot be read from the DOM. Tests that need the rendered content parse the `showrevision` JSON instead (see `parseShowRevisionBody` in `testing/extension/helpers.ts`).
+
 ### Gotcha: Missing `start` parameter
 
 Tracked in [issue #2](https://github.com/jshute96/GoogleDocsDiffRange/issues/2).

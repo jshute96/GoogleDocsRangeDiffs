@@ -87,10 +87,11 @@ npm run test:no-extension    # no-extension only
 - `testing/extension/helpers.ts` — reusable pieces: `openDocAndVersionHistory`,
   `getRangeState`, `expectRange`, `clickFrom` / `clickTo` / `clickListitem`,
   `switchDropdown`, `exitVersionHistory` / `reenterVersionHistory`,
-  `resetRange`, `captureDiffRangeLogs`, `reloadExtension`.
+  `resetRange`, `captureDiffRangeLogs`, `reloadExtension`,
+  `parseShowRevisionBody`, `extractDiffContents`.
 - `testing/extension/version-range.spec.ts` — behavioral suite for the
   extension's range UI (init capture, From/To combinations, range reset,
-  dropdown switch, re-entry, URL rewrite correctness).
+  dropdown switch, re-entry, URL rewrite correctness, diff-content checks).
 
 ### Shared page / once-per-worker fixtures
 
@@ -156,6 +157,28 @@ npm run test:no-extension    # no-extension only
 - **Test doc must have ≥ 4 versions.** The suite assumes at least
   four history items to exercise older/newer combinations. Documented
   in `testing/test_config.json` usage.
+
+### Diff-content verification
+
+- The main doc area is canvas-rendered in Google Docs, so diff text
+  can't be scraped from the DOM. Tests parse the `showrevision` JSON
+  response instead — see `parseShowRevisionBody` in `helpers.ts`.
+- `fixtures.ts` exposes a `diffResponses` worker-scoped fixture that
+  listens to every `showrevision` response and stores its reconstructed
+  `{ before, after }` text keyed by revision range.
+- `extractDiffContents(page, diffResponses)` reads the current
+  `body.dataset.drOverrideStart/End` and returns the latest matching
+  parsed response — call it *after* a capture-flow-settled click.
+- `version-range.spec.ts` begins with a **content-chain sweep** that
+  clicks each of the first up to 10 versions and records
+  `{ before, after }` per listitem. It asserts the chain invariant
+  `versions[i].before === versions[i+1].after` (the content-side state
+  one step older than `i` must equal the content state of listitem
+  `i+1`). Later tests re-use the recorded array via a small
+  `expectDiffContents(page, diffResponses, fromIdx, toIdx)` helper.
+- 10-version cap keeps the sweep fast; tests that click further
+  back skip the `before` assertion unless the target is the oldest
+  item (where `before === ''` is still well-defined).
 
 ### Test fixtures
 

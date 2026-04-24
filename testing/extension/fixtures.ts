@@ -14,7 +14,14 @@
 
 import { test as base, chromium, type BrowserContext, type Page, type Worker } from '@playwright/test';
 import { CDP_PORT_EXTENSION, getTestConfig } from '../test-env';
-import { findReusableTab, openDocAndVersionHistory, reloadExtension } from './helpers';
+import {
+  findReusableTab,
+  openDocAndVersionHistory,
+  parseShowRevisionBody,
+  reloadExtension,
+  type DiffResponseBuf,
+  type DiffResponseEntry,
+} from './helpers';
 
 /** Accessor for the shared console-log buffer. */
 export interface DiffRangeLogBuffer {
@@ -41,6 +48,8 @@ type WorkerFixtures = {
   testDocUrl: string;
   /** Shared [DiffRange] console-log buffer. */
   logs: DiffRangeLogBuffer;
+  /** Shared buffer of parsed `showrevision` responses, newest last. */
+  diffResponses: DiffResponseBuf;
 };
 
 export const test = base.extend<TestFixtures, WorkerFixtures>({
@@ -127,7 +136,49 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         },
       });
     },
-    { scope: 'worker' },
+    // `auto: true` so the listener attaches as soon as the worker starts up
+    // — otherwise a test that doesn't destructure `logs` can fire showrevisions
+    // (via `beforeEach` → `resetRange`) that we then fail to record.
+    { scope: 'worker', auto: true },
+  ],
+
+  diffResponses: [
+    async ({ _sharedPage }, use) => {
+      const buf: DiffResponseEntry[] = [];
+      _sharedPage.on('response', (resp) => {
+        const url = resp.url();
+        if (!/\/showrevision\?/.test(url)) return;
+        const sp = new URL(url).searchParams;
+        const startStr = sp.get('start');
+        const endStr = sp.get('end');
+        if (!startStr || !endStr) return;
+        const start = Number(startStr);
+        const end = Number(endStr);
+        if (!Number.isFinite(start) || !Number.isFinite(end)) return;
+        // Read body async; Playwright allows async handlers.
+        resp.text().then((body) => {
+          try {
+            const contents = parseShowRevisionBody(body);
+            buf.push({ start, end, contents });
+          } catch {
+            // Ignore parse failures — malformed body (e.g., non-JSON error
+            // response) shouldn't break tests that aren't inspecting diff text.
+          }
+        }).catch(() => { /* response aborted — nothing to record */ });
+      });
+      await use({
+        all: () => buf.slice(),
+        clear: () => {
+          buf.length = 0;
+        },
+      });
+    },
+    // `auto: true` so this listener attaches at worker start, not lazily on
+    // first destructure — the content-chain sweep is the first test that reads
+    // diff responses but it needs to see the resetRange-triggered init-capture
+    // response from its own `beforeEach`, which fires before the fixture would
+    // otherwise initialize.
+    { scope: 'worker', auto: true },
   ],
 
   // Pipe the worker-scoped shared instances through to the built-in names so
