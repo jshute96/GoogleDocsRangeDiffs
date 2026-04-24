@@ -55,6 +55,7 @@ One-line descriptions of every source file, grouped by directory.
 | `testing/extension/version-range-from-to.spec.ts` | Behavioral tests: From/To bounds, range collapse on listitem click, URL rewrite |
 | `testing/extension/version-range-navigation.spec.ts` | Behavioral tests: dropdown switches, VH exit/reenter, Diff full history |
 | `testing/extension/version-range-missing-start.spec.ts` | Behavioral tests: missing-start showrevision workaround (issue #2) |
+| `testing/extension/version-range-expand-arrow.spec.ts` | Behavioral tests: expand/collapse arrow — range pinning, round-trip, divergent collapse |
 | `testing/no-extension/playwright.config.ts` | Playwright config for live tests without extension |
 | `testing/no-extension/fixtures.ts` | Worker-scoped fixtures: CDP context + shared `page` with VH open |
 | `testing/no-extension/smoke.spec.ts` | Smoke test: opens a Google Doc without extension as baseline |
