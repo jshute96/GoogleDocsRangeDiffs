@@ -22,20 +22,23 @@ function revisionInterceptorFunc(): void {
     else delete document.body.dataset.drOverrideEnd;
   }
 
-  // Add the .dr-btn-in-between class to From/To buttons on every version
-  // listitem positioned strictly between the From-highlighted and
-  // To-highlighted listitems. Mirrors updateInBetweenHighlights() in
-  // content-revisions.ts so the interceptor can update highlights after
-  // a capture without crossing world boundaries.
+  // Recompute .dr-btn-in-between, .dr-btn-hidden, and .dr-btn-shown on the
+  // per-row Start/End/Diff buttons. Mirrors updateInBetweenHighlights() in
+  // content-revisions.ts so the interceptor can refresh state after a
+  // capture without crossing worlds — see that copy for the full rules.
   function updateInBetweenHighlights(): void {
-    const all = document.querySelectorAll('.dr-btn-in-between');
-    for (let i = 0; i < all.length; i++) all[i].classList.remove('dr-btn-in-between');
+    const stale = document.querySelectorAll('.dr-btn-in-between, .dr-btn-hidden, .dr-btn-shown');
+    for (let i = 0; i < stale.length; i++) {
+      stale[i].classList.remove('dr-btn-in-between');
+      stale[i].classList.remove('dr-btn-hidden');
+      stale[i].classList.remove('dr-btn-shown');
+    }
     const fromHL = document.querySelector('.dr-version-from-btn.dr-btn-highlighted');
     const toHL = document.querySelector('.dr-version-to-btn.dr-btn-highlighted');
     if (!fromHL || !toHL) return;
     const fromItem = fromHL.closest('[role="listitem"]');
     const toItem = toHL.closest('[role="listitem"]');
-    if (!fromItem || !toItem || fromItem === toItem) return;
+    if (!fromItem || !toItem) return;
     const items = Array.from(document.querySelectorAll('[aria-label="Versions"] [role="listitem"]'));
     const fromIdx = items.indexOf(fromItem);
     const toIdx = items.indexOf(toItem);
@@ -47,6 +50,13 @@ function revisionInterceptorFunc(): void {
       const tb = items[j].querySelector('.dr-version-to-btn');
       if (fb) fb.classList.add('dr-btn-in-between');
       if (tb) tb.classList.add('dr-btn-in-between');
+    }
+    for (let i = 0; i < items.length; i++) {
+      if (i <= lo) items[i].querySelector('.dr-version-from-btn')?.classList.add('dr-btn-hidden');
+      if (i >= hi) items[i].querySelector('.dr-version-to-btn')?.classList.add('dr-btn-hidden');
+    }
+    if (fromItem === toItem) {
+      fromItem.querySelector('.dr-version-both-btn')?.classList.add('dr-btn-shown');
     }
   }
 
@@ -178,7 +188,7 @@ function revisionInterceptorFunc(): void {
       console.log('[DiffRange] orig request' + flagSuffix + ': ' + os + ' to ' + oe + modeSuffix);
     }
 
-    // Capture mode: when the user clicked "From here" or "To here" on a
+    // Capture mode: when the user clicked "Start here" or "End here" on a
     // version, content-revisions.ts sets document.body.dataset.drCaptureMode
     // and marks the source listitem with .dr-pending-capture. Parse the
     // original start/end from this URL and update the window-level overrides
@@ -318,6 +328,20 @@ function revisionInterceptorFunc(): void {
 
         setOverrides(newStart ?? undefined, newEnd ?? undefined);
 
+        // Maintain drBothOnSelected regardless of whether the pending-
+        // capture listitem is still in the DOM. Arrow-click re-renders
+        // can wipe the listitem (and its .dr-pending-capture class)
+        // between mousedown and XHR.open, leaving pending null in the
+        // capture branch below. We've still captured a valid range, so
+        // set the flag; restoreBothOnSelectedIfFlagged pins From/To to
+        // the current SelectedTile when fresh buttons land, and the
+        // highlights end up on the right re-rendered item.
+        if (tookBoth) {
+          document.body.dataset.drBothOnSelected = '1';
+        } else {
+          delete document.body.dataset.drBothOnSelected;
+        }
+
         // Update which version's From/To buttons are highlighted
         const pending = document.querySelector('.dr-pending-capture');
         if (pending) {
@@ -357,21 +381,9 @@ function revisionInterceptorFunc(): void {
           }
           pending.classList.remove('dr-pending-capture');
           updateInBetweenHighlights();
-
-          // When the capture lands From and To on the *same* listitem (the
-          // just-selected one), flag it for restoration: a subsequent
-          // re-render — e.g., Docs wipes the listitem DOM when it expands
-          // sub-versions under the arrow — would otherwise lose the
-          // highlights. injectVersionButtons calls restoreBothOnSelectedIfFlagged,
-          // which pins both highlights to a single anchor (prefers the item
-          // currently holding both; falls back to SelectedTile on wipe). The
-          // flag is cleared on any capture where From and To diverge, and on
-          // reset.
-          if (tookBoth) {
-            document.body.dataset.drBothOnSelected = '1';
-          } else {
-            delete document.body.dataset.drBothOnSelected;
-          }
+          // drBothOnSelected is set above (outside this if-block) so the
+          // flag is maintained even when pending was null at XHR time
+          // (see comment above setOverrides).
         }
       }
 

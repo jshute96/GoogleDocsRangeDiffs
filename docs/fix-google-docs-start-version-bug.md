@@ -118,7 +118,7 @@ Tests live in `testing/extension/version-range-missing-start.spec.ts`. Helpers i
 | simulation ON, workaround ON, cached neighbor | Path B: mid-range click succeeds without a dance |
 | simulation ON, workaround ON, cleared cache | Path C: dance fires; verify `scheduling dance` + `re-clicking target` log lines appear |
 | simulation ON, workaround ON, click oldest | Path A: `start=1` is used; `before` content is empty |
-| simulation ON, workaround ON, "From here" on missing-start version | Captured mode stashed correctly — existing `To` endpoint preserved, not collapsed to `from=to=target` |
+| simulation ON, workaround ON, "Start here" on missing-start version | Captured mode stashed correctly — existing `To` endpoint preserved, not collapsed to `from=to=target` |
 | simulation ON, workaround ON, several mid-range clicks | Chain invariant holds across multiple clicks under simulation |
 
 ## Interactive testing

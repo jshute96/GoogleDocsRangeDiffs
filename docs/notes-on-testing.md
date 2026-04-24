@@ -238,8 +238,8 @@ When version history is open, the extension adds these DOM elements
 
 - `#dr-version-button-styles` — injected `<style>` block
 - `.dr-version-buttons` — one per revision entry, each containing:
-  - `.dr-version-from-btn` — "From here" button
-  - `.dr-version-to-btn` — "To here" button
+  - `.dr-version-from-btn` — "Start here" button (class name kept for historical reasons)
+  - `.dr-version-to-btn` — "End here" button (class name kept for historical reasons)
 
 These elements are absent in the no-extension baseline.
 

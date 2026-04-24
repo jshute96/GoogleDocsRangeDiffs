@@ -7,15 +7,15 @@ This extension adds diff-between-versions functionality to Google Docs.
 1. Open a Google Doc in Chrome.
 2. Open Version History: **File → Version history → See version history**
    (or press **Ctrl+Alt+Shift+H**).
-3. Each version gets **From here** / **To here** buttons:
-   - Click **From here** on an older version to set the start of your range.
-   - Click **To here** on a newer version to set the end.
+3. Each version gets **Start here** / **End here** buttons:
+   - Click **Start here** on an older version to set the start of your range.
+   - Click **End here** on a newer version to set the end.
    - The diff updates to show changes across the selected range.
    - Selected endpoints highlight in solid blue; versions between them
      highlight in light blue.
 4. Click **Diff full history** above the versions list to diff from the
-   first revision to the newest — equivalent to **From here** on the oldest
-   version and **To here** on the newest in one click.
+   first revision to the newest — equivalent to **Start here** on the oldest
+   version and **End here** on the newest in one click.
 5. Switching the dropdown (e.g., "All versions" → "Named versions") resets
    the range selection.
 6. Clicking on a version's date/name acts only as selection — it no longer

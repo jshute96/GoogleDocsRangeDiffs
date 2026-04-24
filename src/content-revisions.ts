@@ -1,6 +1,6 @@
 // Revision override UI for Google Docs Version History panel.
 //
-// Injects "From here" / "To here" buttons on each version listitem and a
+// Injects "Start here" / "End here" buttons on each version listitem and a
 // "Diff full history" button above the list. Users pick range endpoints
 // by clicking versions; the MAIN-world interceptor rewrites the resulting
 // showrevision URL to the chosen range. Selected endpoints highlight in
@@ -18,7 +18,7 @@
   // Only run on Google Docs document pages
   if (!location.pathname.match(/\/document\/d\//)) return;
 
-  // Inject "From here" / "To here" buttons into each version listitem.
+  // Inject "Start here" / "End here" buttons into each version listitem.
   // Clicking a button:
   //   1. Sets document.body.dataset.drCaptureMode ('from' or 'to')
   //   2. Marks the listitem with .dr-pending-capture so the interceptor can
@@ -30,14 +30,47 @@
   //      toggles .dr-btn-highlighted on the from/to button(s) of the captured
   //      listitem.
   function injectVersionButtons(): void {
-    // Inject the highlight stylesheet once per page
-    if (!document.getElementById('dr-version-button-styles')) {
-      const style = document.createElement('style');
-      style.id = 'dr-version-button-styles';
-      style.textContent =
+    // Inject (or refresh) the highlight stylesheet. We overwrite its
+    // contents on every call instead of early-returning when the <style>
+    // tag already exists — otherwise, after the user reloads the extension
+    // without refreshing the tab, the previous script's injected stylesheet
+    // persists and new rules from the rebuilt script never get applied.
+    const styleText =
         '.dr-version-button { padding:2px 8px; border:1px solid #dadce0; border-radius:4px; background:#fff; color:#1a73e8; cursor:pointer; font-size:11px; font-family:inherit; }' +
         '.dr-version-button.dr-btn-in-between:not(.dr-btn-highlighted) { background:#aecbfa; color:#1967d2; border-color:#8ab4f8; }' +
         '.dr-version-button.dr-btn-highlighted { background:#1a73e8; color:#fff; border-color:#1a73e8; }' +
+        '.dr-version-button.dr-btn-hidden { display:none; }' +
+        // The "Diff here" button is the single-button state shown only on
+        // the endpoint when From=To (single-version diff). Default hidden
+        // via CSS so it's baseline-off even across class resets; the
+        // .dr-btn-shown toggle reveals it, and we restyle it with the
+        // solid-blue highlighted look since it's always "active" when visible.
+        '.dr-version-both-btn { display:none; }' +
+        '.dr-version-both-btn.dr-btn-shown { display:inline-block; background:#1a73e8; color:#fff; border-color:#1a73e8; }' +
+        // Pin a min-width on the per-row buttons so a row that shows only
+        // one of the pair renders the same width as a row that shows both
+        // — otherwise the column collapses to the lone button's intrinsic
+        // width and looks smaller. Scoped to .dr-version-buttons so the
+        // Diff-full-history button keeps its natural sizing.
+        '.dr-version-buttons .dr-version-button { min-width:68px; }' +
+        // Long version names wrap to multiple lines and would flow under
+        // our absolutely-positioned button column on the right. Docs sets
+        // an explicit width:200px on the outer text-field wrapper and
+        // the inner textarea. We clamp both with !important. The textarea
+        // sits ~20px inside the outer (material-design notched-outline
+        // padding), so it extends past the outer's right edge — the
+        // width has to be small enough that the textarea itself (not just
+        // the outer) stops before the button column at right ≈ 1177.
+        '.appsDocsRevisionsWizSidebarRevisionTitleTextbox,' +
+        '.appsDocsRevisionsWizSidebarRevisionTitleTextbox textarea ' +
+        '{ width:140px !important; max-width:140px !important; }' +
+        // The inner Container is a flex-column with align-items:center,
+        // which horizontally centers the (narrower) textarea inside it.
+        // That centering puts ~30px of empty space to the left of the
+        // textarea, shifting it right and pushing the right edge under
+        // our button column. Force flex-start so the textarea hugs the
+        // left edge of the Container instead.
+        '.appsDocsRevisionsWizSidebarRevisionTitleTextboxContainer { align-items:flex-start !important; }' +
         '.dr-full-history-row { padding:8px 16px; font-family:Google Sans,Roboto,sans-serif; }' +
         '.dr-full-history-btn { padding:4px 10px; font-size:12px; }' +
         // Rename textareas show a text I-beam by default; since we've
@@ -46,8 +79,13 @@
         // activated via the three-dots menu, the editing textarea gets the
         // normal text caret again.
         '[aria-label="Versions"] [role="listitem"] textarea:not(:focus) { cursor:pointer; }';
-      document.head.appendChild(style);
+    let styleEl = document.getElementById('dr-version-button-styles') as HTMLStyleElement | null;
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = 'dr-version-button-styles';
+      document.head.appendChild(styleEl);
     }
+    if (styleEl.textContent !== styleText) styleEl.textContent = styleText;
 
     injectFullHistoryButton();
 
@@ -55,9 +93,20 @@
     items.forEach((item) => {
       if (item.querySelector('.dr-version-buttons')) return;
 
+      // Anchor the vertical button column to the right edge of the listitem.
+      // position:relative on the item lets us absolutely position the column
+      // without changing Docs' own layout.
+      (item as HTMLElement).style.position = 'relative';
+
       const row = document.createElement('div');
       row.className = 'dr-version-buttons';
-      row.style.cssText = 'display:flex;gap:6px;padding:4px 12px 8px 12px;font-family:Google Sans,Roboto,sans-serif;';
+      // right:40px leaves room for Docs' three-dots (more-actions) kebab
+      // menu that appears on the selected/hovered listitem at the far right.
+      // Vertically center the column inside the listitem so it aligns with
+      // the name/author block — top:50% + translateY(-50%) keeps the gap
+      // between paired buttons fixed (via the flex `gap`) regardless of
+      // tile height (tall rows like the wrapped "long" name still center).
+      row.style.cssText = 'position:absolute;top:50%;transform:translateY(-50%);right:40px;display:flex;flex-direction:column;gap:4px;font-family:Google Sans,Roboto,sans-serif;z-index:1;';
 
       function makeBtn(label: string, mode: string): HTMLButtonElement {
         const b = document.createElement('button');
@@ -91,8 +140,9 @@
         return b;
       }
 
-      row.appendChild(makeBtn('From here', 'from'));
-      row.appendChild(makeBtn('To here', 'to'));
+      row.appendChild(makeBtn('Start here', 'from'));
+      row.appendChild(makeBtn('End here', 'to'));
+      row.appendChild(makeBtn('Diff here', 'both'));
 
       item.appendChild(row);
 
@@ -281,13 +331,24 @@
     return true;
   }
 
-  // Add the .dr-btn-in-between class to From/To buttons on every version
-  // listitem positioned strictly between the From-highlighted and
-  // To-highlighted listitems. Buttons at the boundaries keep their solid
-  // .dr-btn-highlighted; buttons outside the range have neither class.
+  // Maintain derived states on the three per-row buttons (Start/End/Diff):
+  //   - .dr-btn-in-between: light-blue fill on Start/End buttons of items
+  //     strictly between the From- and To-highlighted items. Boundaries
+  //     keep their solid .dr-btn-highlighted.
+  //   - .dr-btn-hidden: hides a Start/End button whose action wouldn't
+  //     make sense from that row's position: above the range hides
+  //     "Start here"; below hides "End here"; at an endpoint, the opposite
+  //     button is hidden (clicking it would just collapse the range).
+  //   - .dr-btn-shown (on the "Diff here" button, default-hidden via CSS):
+  //     revealed only on the single item where From=To — replaces the
+  //     Start/End pair with a single "Diff here" indicator on that row.
   function updateInBetweenHighlights(): void {
-    const all = document.querySelectorAll('.dr-btn-in-between');
-    for (let i = 0; i < all.length; i++) all[i].classList.remove('dr-btn-in-between');
+    const stale = document.querySelectorAll('.dr-btn-in-between, .dr-btn-hidden, .dr-btn-shown');
+    for (let i = 0; i < stale.length; i++) {
+      stale[i].classList.remove('dr-btn-in-between');
+      stale[i].classList.remove('dr-btn-hidden');
+      stale[i].classList.remove('dr-btn-shown');
+    }
 
     const fromHL = document.querySelector('.dr-version-from-btn.dr-btn-highlighted');
     const toHL = document.querySelector('.dr-version-to-btn.dr-btn-highlighted');
@@ -295,7 +356,7 @@
 
     const fromItem = fromHL.closest('[role="listitem"]');
     const toItem = toHL.closest('[role="listitem"]');
-    if (!fromItem || !toItem || fromItem === toItem) return;
+    if (!fromItem || !toItem) return;
 
     const items = Array.from(document.querySelectorAll('[aria-label="Versions"] [role="listitem"]'));
     const fromIdx = items.indexOf(fromItem);
@@ -303,11 +364,20 @@
     if (fromIdx === -1 || toIdx === -1) return;
     const lo = Math.min(fromIdx, toIdx);
     const hi = Math.max(fromIdx, toIdx);
+
     for (let j = lo + 1; j < hi; j++) {
       const fb = items[j].querySelector('.dr-version-from-btn');
       const tb = items[j].querySelector('.dr-version-to-btn');
       if (fb) fb.classList.add('dr-btn-in-between');
       if (tb) tb.classList.add('dr-btn-in-between');
+    }
+
+    for (let i = 0; i < items.length; i++) {
+      if (i <= lo) items[i].querySelector('.dr-version-from-btn')?.classList.add('dr-btn-hidden');
+      if (i >= hi) items[i].querySelector('.dr-version-to-btn')?.classList.add('dr-btn-hidden');
+    }
+    if (fromItem === toItem) {
+      fromItem.querySelector('.dr-version-both-btn')?.classList.add('dr-btn-shown');
     }
   }
 
@@ -433,10 +503,12 @@
   // versions" / etc.) since that loads a different set of versions and
   // the captured range no longer applies.
   function resetRevisionOverrides(): void {
-    const hl = document.querySelectorAll('.dr-btn-highlighted, .dr-btn-in-between');
+    const hl = document.querySelectorAll('.dr-btn-highlighted, .dr-btn-in-between, .dr-btn-hidden, .dr-btn-shown');
     for (let i = 0; i < hl.length; i++) {
       hl[i].classList.remove('dr-btn-highlighted');
       hl[i].classList.remove('dr-btn-in-between');
+      hl[i].classList.remove('dr-btn-hidden');
+      hl[i].classList.remove('dr-btn-shown');
     }
     setDatasetOverrides(null, null);
     delete document.body.dataset.drBothOnSelected;
@@ -675,7 +747,7 @@
     // and drMissingStartDance are both clear, which any waiter polling for
     // "settled" state could mistake for done. Arm capture manually since
     // .click() fires only click, not mousedown. Use the mode the user's
-    // original click carried (stashed above) so "From here" / "To here"
+    // original click carried (stashed above) so "Start here" / "End here"
     // logic on the re-click combines with existing overrides the same way
     // a normal (non-missing-start) capture would.
     console.log('[DiffRange] missing-start dance: re-clicking target idx=' + idx + ' (mode=' + stashedMode + ')');
