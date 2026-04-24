@@ -12,8 +12,8 @@
  * state via `resetRange` in `beforeEach` rather than re-navigating.
  */
 
-import { test as base, chromium, type BrowserContext, type Page, type Worker } from '@playwright/test';
-import { CDP_PORT_EXTENSION, getTestConfig } from '../test-env';
+import { test as base, type BrowserContext, type Page, type Worker } from '@playwright/test';
+import { CDP_PORT_EXTENSION, connectOverCDPWithGuidance, getTestConfig } from '../test-env';
 import {
   findReusableTab,
   openDocAndVersionHistory,
@@ -55,8 +55,9 @@ type WorkerFixtures = {
 export const test = base.extend<TestFixtures, WorkerFixtures>({
   _sharedContext: [
     async ({}, use) => {
-      const browser = await chromium.connectOverCDP(
-        `http://127.0.0.1:${CDP_PORT_EXTENSION}`
+      const browser = await connectOverCDPWithGuidance(
+        CDP_PORT_EXTENSION,
+        'open-browser-with-extension.sh'
       );
       const ctx = browser.contexts()[0];
       if (!ctx) throw new Error('No browser context found — is the browser open?');

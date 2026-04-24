@@ -50,7 +50,11 @@ One-line descriptions of every source file, grouped by directory.
 | `testing/extension/fixtures.ts` | Worker-scoped fixtures: CDP context, shared `page` with VH open, `logs`, `diffResponses` buffers |
 | `testing/extension/smoke.spec.ts` | Smoke test: verifies extension UI is injected into the shared VH page |
 | `testing/extension/helpers.ts` | Extension test helpers: doc/VH setup, range-state reads, click actions, showrevision parser, missing-start toggles |
-| `testing/extension/version-range.spec.ts` | Behavioral tests: init capture, From/To, range reset, dropdown, re-entry, full-history |
+| `testing/extension/version-range-shared.ts` | Shared scaffolding for split version-range specs: sweep registrar, per-file recorder, content assertions |
+| `testing/extension/version-range-basic.spec.ts` | Behavioral tests: initial entry, content-chain sweep, basic selection, oldest-version edges |
+| `testing/extension/version-range-from-to.spec.ts` | Behavioral tests: From/To bounds, range collapse on listitem click, URL rewrite |
+| `testing/extension/version-range-navigation.spec.ts` | Behavioral tests: dropdown switches, VH exit/reenter, Diff full history |
+| `testing/extension/version-range-missing-start.spec.ts` | Behavioral tests: missing-start showrevision workaround (issue #2) |
 | `testing/no-extension/playwright.config.ts` | Playwright config for live tests without extension |
 | `testing/no-extension/fixtures.ts` | Worker-scoped fixtures: CDP context + shared `page` with VH open |
 | `testing/no-extension/smoke.spec.ts` | Smoke test: opens a Google Doc without extension as baseline |

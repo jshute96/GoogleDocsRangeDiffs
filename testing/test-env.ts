@@ -8,6 +8,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import { fileURLToPath } from 'url';
+import { chromium, type Browser } from '@playwright/test';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -27,6 +28,32 @@ interface TestConfig {
     password: string;
   };
   test_doc: string;
+}
+
+/**
+ * Connect to a browser launched by one of the open-browser-* scripts,
+ * translating the low-level ECONNREFUSED / timeout into a human-readable
+ * error that names the launch script to run. Playwright's default error
+ * ("connect ECONNREFUSED 127.0.0.1:9223") doesn't tell a user new to the
+ * repo what they're missing.
+ */
+export async function connectOverCDPWithGuidance(
+  port: number,
+  launchScript: string
+): Promise<Browser> {
+  try {
+    return await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Failed to connect to CDP browser on port ${port}: ${msg}\n` +
+      `\n` +
+      `The test browser isn't running. Launch it first:\n` +
+      `  scripts/${launchScript}\n` +
+      `\n` +
+      `Make sure you're logged into Google in that browser before running tests.`
+    );
+  }
 }
 
 let _config: TestConfig | null = null;

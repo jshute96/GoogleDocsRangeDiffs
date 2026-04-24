@@ -10,8 +10,8 @@
  * built-in `context` / `page` fixtures are overridden to pipe them through.
  */
 
-import { test as base, chromium, type BrowserContext, type Page } from '@playwright/test';
-import { CDP_PORT_NO_EXTENSION, getTestConfig } from '../test-env';
+import { test as base, type BrowserContext, type Page } from '@playwright/test';
+import { CDP_PORT_NO_EXTENSION, connectOverCDPWithGuidance, getTestConfig } from '../test-env';
 
 type TestFixtures = {
   context: BrowserContext;
@@ -28,8 +28,9 @@ type WorkerFixtures = {
 export const test = base.extend<TestFixtures, WorkerFixtures>({
   _sharedContext: [
     async ({}, use) => {
-      const browser = await chromium.connectOverCDP(
-        `http://127.0.0.1:${CDP_PORT_NO_EXTENSION}`
+      const browser = await connectOverCDPWithGuidance(
+        CDP_PORT_NO_EXTENSION,
+        'open-browser-without-extension.sh'
       );
       const ctx = browser.contexts()[0];
       if (!ctx) throw new Error('No browser context found — is the browser open?');

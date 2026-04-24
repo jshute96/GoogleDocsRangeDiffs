@@ -89,9 +89,23 @@ npm run test:no-extension    # no-extension only
   `switchDropdown`, `exitVersionHistory` / `reenterVersionHistory`,
   `resetRange`, `captureDiffRangeLogs`, `reloadExtension`,
   `parseShowRevisionBody`, `extractDiffContents`.
-- `testing/extension/version-range.spec.ts` — behavioral suite for the
-  extension's range UI (init capture, From/To combinations, range reset,
-  dropdown switch, re-entry, URL rewrite correctness, diff-content checks).
+- `testing/extension/version-range-*.spec.ts` — behavioral suite for the
+  extension's range UI, split into focused files so `-g` / per-file runs
+  exercise smaller slices:
+  - `version-range-basic.spec.ts` — initial entry, content-chain sweep,
+    basic selection, oldest-version edges.
+  - `version-range-from-to.spec.ts` — From/To bounds, range collapse,
+    URL rewrite.
+  - `version-range-navigation.spec.ts` — dropdown switches, VH
+    exit/reenter, Diff full history.
+  - `version-range-missing-start.spec.ts` — missing-start showrevision
+    workaround (issue #2).
+- `testing/extension/version-range-shared.ts` — scaffolding shared by
+  those specs: per-file `VersionRecorder`, the `beforeEach` registrar,
+  and a `registerContentChainSweep` helper that registers the sweep as
+  a test in each file that needs it (each file's module state is
+  isolated, so files that compare diff contents re-run the sweep up
+  front; files that only check range/UI skip it).
 
 ### Shared page / once-per-worker fixtures
 
@@ -169,13 +183,16 @@ npm run test:no-extension    # no-extension only
 - `extractDiffContents(page, diffResponses)` reads the current
   `body.dataset.drOverrideStart/End` and returns the latest matching
   parsed response — call it *after* a capture-flow-settled click.
-- `version-range.spec.ts` begins with a **content-chain sweep** that
-  clicks each of the first up to 10 versions and records
-  `{ before, after }` per listitem. It asserts the chain invariant
+- Each split spec that checks diff contents begins with a
+  **content-chain sweep** (registered via
+  `registerContentChainSweep(recorder)` from `version-range-shared.ts`)
+  that clicks each of the first up to 10 versions and records
+  `{ before, after }` per listitem into that file's recorder. It
+  asserts the chain invariant
   `versions[i].before === versions[i+1].after` (the content-side state
   one step older than `i` must equal the content state of listitem
-  `i+1`). Later tests re-use the recorded array via a small
-  `expectDiffContents(page, diffResponses, fromIdx, toIdx)` helper.
+  `i+1`). Later tests re-use the recorded array via
+  `expectDiffContents(page, diffResponses, recorder, fromIdx, toIdx)`.
 - 10-version cap keeps the sweep fast; tests that click further
   back skip the `before` assertion unless the target is the oldest
   item (where `before === ''` is still well-defined).

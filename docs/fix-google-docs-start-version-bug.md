@@ -99,7 +99,7 @@ When `captureMode='to'` and the existing `curStart < origEnd`, the capture branc
 
 ## Automated testing
 
-Tests live in `testing/extension/version-range.spec.ts`. Helpers in `testing/extension/helpers.ts`:
+Tests live in `testing/extension/version-range-missing-start.spec.ts`. Helpers in `testing/extension/helpers.ts`:
 
 - `setSimulateMissingStart(page, true/false)` — toggles `body.dataset.drSimulateMissingStart`. When set, the interceptor strips `start` from every URL (outgoing + its own reading), mirroring the real Docs bug.
 - `setDisableMissingStartWorkaround(page, true/false)` — toggles `body.dataset.drDisableMissingStartWorkaround`. Short-circuits the inference/dance; used for the "broken baseline" assertion.
