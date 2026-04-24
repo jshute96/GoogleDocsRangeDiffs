@@ -362,9 +362,11 @@ function revisionInterceptorFunc(): void {
           // just-selected one), flag it for restoration: a subsequent
           // re-render — e.g., Docs wipes the listitem DOM when it expands
           // sub-versions under the arrow — would otherwise lose the
-          // highlights. injectVersionButtons reads this flag and re-applies
-          // From/To to the current SelectedTile. The flag is cleared on any
-          // capture where From and To diverge, and on reset.
+          // highlights. injectVersionButtons calls restoreBothOnSelectedIfFlagged,
+          // which pins both highlights to a single anchor (prefers the item
+          // currently holding both; falls back to SelectedTile on wipe). The
+          // flag is cleared on any capture where From and To diverge, and on
+          // reset.
           if (tookBoth) {
             document.body.dataset.drBothOnSelected = '1';
           } else {
