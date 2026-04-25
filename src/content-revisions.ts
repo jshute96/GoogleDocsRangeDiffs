@@ -89,7 +89,13 @@
         // of the version row uses. Use :not(:focus) so that if rename is
         // activated via the three-dots menu, the editing textarea gets the
         // normal text caret again.
-        '[aria-label="Versions"] [role="listitem"] textarea:not(:focus) { cursor:pointer; }';
+        '[aria-label="Versions"] [role="listitem"] textarea:not(:focus) { cursor:pointer; }' +
+        // Hide Docs' "Highlight changes" checkbox — the Diffs|Versions
+        // toggle at the top of our injected UI is the user-facing control
+        // for switching modes. We still toggle the underlying input
+        // programmatically (to drive Docs' refetch / polarity fix); a
+        // hidden ancestor doesn't block HTMLInputElement.click().
+        '.dr-hidden-highlight-changes { display:none !important; }';
     let styleEl = document.getElementById('dr-version-button-styles') as HTMLStyleElement | null;
     if (!styleEl) {
       styleEl = document.createElement('style');
@@ -99,6 +105,7 @@
     if (styleEl.textContent !== styleText) styleEl.textContent = styleText;
 
     injectFullHistoryButton();
+    hideHighlightChangesControl();
 
     const items = document.querySelectorAll('[aria-label="Versions"] [role="listitem"]');
     items.forEach((item) => {
@@ -262,6 +269,30 @@
       .find((l) => l.textContent?.trim() === 'Highlight changes') as HTMLLabelElement | undefined;
     if (!label) return null;
     return document.getElementById(label.htmlFor) as HTMLInputElement | null;
+  }
+
+  // Hide the "Highlight changes" checkbox + label from the user. We still
+  // drive the input programmatically (polarity fix, mode entry) — a hidden
+  // ancestor doesn't block HTMLInputElement.click(). We hide the smallest
+  // ancestor of the label that also contains the checkbox (Docs' wrapper
+  // class names are dynamic, so we find the wrapper structurally instead
+  // of by selector).
+  function hideHighlightChangesControl(): void {
+    const label = Array.from(document.querySelectorAll('label'))
+      .find((l) => l.textContent?.trim() === 'Highlight changes') as HTMLLabelElement | undefined;
+    if (!label) return;
+    const checkbox = label.htmlFor ? document.getElementById(label.htmlFor) : null;
+    let wrapper: HTMLElement = label;
+    if (checkbox) {
+      let candidate: HTMLElement | null = label.parentElement;
+      while (candidate && !candidate.contains(checkbox)) {
+        candidate = candidate.parentElement;
+      }
+      if (candidate) wrapper = candidate;
+    }
+    if (!wrapper.classList.contains('dr-hidden-highlight-changes')) {
+      wrapper.classList.add('dr-hidden-highlight-changes');
+    }
   }
 
   // Wraps a Highlight-changes toggle pair. Docs' change handler fires its

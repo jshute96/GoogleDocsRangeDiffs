@@ -45,6 +45,10 @@ Single mechanism for the entire bug, including session start in inverted polarit
 
 In Versions mode the rewrite branch always strips `start`, regardless of overrides. Polarity inversion can leave Docs producing `start+end` URLs while we're in Versions mode (checkbox unchecked + inverted polarity = diff URLs); the strip keeps the displayed content consistent with the user's selected mode.
 
+### Hidden Highlight-changes checkbox
+
+The Diffs|Versions toggle is the user-facing control; Docs' "Highlight changes" checkbox is now an internal lever we toggle programmatically. The content script hides the checkbox + label via a `dr-hidden-highlight-changes` wrapper class so the user only sees one control. `HTMLInputElement.click()` still toggles `checked` on a hidden input, so the polarity-fix and mode-entry paths work unchanged.
+
 ## Coverage
 
 - `testing/no-extension/docs-version-fallback-bug.spec.ts` reproduces the bug + polarity XOR without the extension, using `armOneShotShowRevisionDelay` to make one diff fetch slow.
