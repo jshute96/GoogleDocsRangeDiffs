@@ -59,7 +59,9 @@ One-line descriptions of every source file, grouped by directory.
 | `testing/extension/version-range-versions-mode.spec.ts` | Behavioral tests: Diffs|Versions toggle, per-row button visibility, single-version content |
 | `testing/no-extension/playwright.config.ts` | Playwright config for live tests without extension |
 | `testing/no-extension/fixtures.ts` | Worker-scoped fixtures: CDP context + shared `page` with VH open |
+| `testing/no-extension/helpers.ts` | Helpers for no-extension tests: showrevision capture, one-shot delay injection, checkbox toggling |
 | `testing/no-extension/smoke.spec.ts` | Smoke test: opens a Google Doc without extension as baseline |
+| `testing/no-extension/docs-version-fallback-bug.spec.ts` | Reproduction of Docs slow-diff version-fallback bug + Highlight-changes XOR polarity |
 
 ## Design Docs (`docs/`)
 

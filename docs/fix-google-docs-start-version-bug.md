@@ -13,11 +13,29 @@ workaround if the bug resurfaces.
 Google Docs sometimes fires a `showrevision` request without a `start` parameter (e.g., just `?end=81409`).
 
 - Appears to be a Google Docs bug — reproduces without the extension.
-- Triggered on large docs.
-- Sticky: once in this state, all future `showrevision` requests omit `start`. The state never recovers until the tab is reloaded.
+- Triggered on large docs whose first diff fetch takes too long.
+- Sticky within the polarity it leaves the session in (see "Trigger" / "Recovery" below).
 - Clicking different revisions no longer updates the displayed diff.
 - Without the extension: revision navigation is visibly broken.
 - With the naive extension (no workaround): same — the rewritten URL still has no `start`, and every click shows the same stuck diff.
+
+### Trigger
+
+- Reproduced in `testing/no-extension/docs-version-fallback-bug.spec.ts`. Test injects a 5s delay around `XMLHttpRequest.send` / `window.fetch` for the next `/showrevision` request that carries `start=`, simulating slow network for one diff fetch.
+- Threshold appears to be ~2s; 5s makes the trigger reliable.
+- After the slow request, Docs auto-fires a follow-up `showrevision` *without* `start=` and renders a single-revision view — even though "Highlight changes" is still visibly checked.
+
+### Stickiness within a polarity
+
+- "Polarity" = the relationship between Highlight-changes checkbox state and the `start=` / no-`start` URL Docs sends:
+  - **Normal polarity**: checkbox checked → `start+end`; unchecked → `end` only.
+  - **Inverted polarity** (post-bug): checkbox checked → `end` only; unchecked → `start+end`.
+- Each slow-diff trigger flips the polarity. Toggling the checkbox does *not* flip the polarity — it just moves along the current polarity's mapping.
+
+### Recovery
+
+- Tab reload resets polarity to normal.
+- A second slow-diff trigger flips polarity back to normal (not yet asserted in the no-extension repro; observed empirically).
 
 ## The fix: infer the missing `start`
 
