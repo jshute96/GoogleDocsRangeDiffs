@@ -152,10 +152,13 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         const sp = new URL(url).searchParams;
         const startStr = sp.get('start');
         const endStr = sp.get('end');
-        if (!startStr || !endStr) return;
-        const start = Number(startStr);
+        if (!endStr) return;
         const end = Number(endStr);
-        if (!Number.isFinite(start) || !Number.isFinite(end)) return;
+        if (!Number.isFinite(end)) return;
+        // start is optional — Versions-mode URLs have only end. Encode that
+        // by leaving the entry's start field undefined.
+        const start = startStr ? Number(startStr) : undefined;
+        if (start !== undefined && !Number.isFinite(start)) return;
         // Read body async; Playwright allows async handlers.
         resp.text().then((body) => {
           try {

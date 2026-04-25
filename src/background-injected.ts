@@ -56,7 +56,12 @@ function revisionInterceptorFunc(): void {
       if (i >= hi) items[i].querySelector('.dr-version-to-btn')?.classList.add('dr-btn-hidden');
     }
     if (fromItem === toItem) {
-      fromItem.querySelector('.dr-version-both-btn')?.classList.add('dr-btn-shown');
+      const bothBtn = fromItem.querySelector('.dr-version-both-btn');
+      bothBtn?.classList.add('dr-btn-shown');
+      // Mirror content-revisions.ts: Diffs-mode From=To lights the Diff-here
+      // button. Versions mode applies dr-btn-shown without dr-btn-highlighted,
+      // rendering the same button as an unlit affordance.
+      bothBtn?.classList.add('dr-btn-highlighted');
     }
   }
 
@@ -119,6 +124,16 @@ function revisionInterceptorFunc(): void {
     const origStartStr = searchParams.get('start');
     const origEndStr = searchParams.get('end');
 
+    // Sanity check: in Versions mode, Highlight changes is unchecked, so
+    // every showrevision should arrive with no `start`. If one shows up
+    // anyway something has driven Docs into a state we didn't expect —
+    // e.g., the user manually re-checked the checkbox under our feet, or
+    // a programmatic toggle path didn't bookkeep drMode. Log loudly so the
+    // mismatch is obvious in tests + DevTools.
+    if (origStartStr && document.body?.dataset.drMode === 'versions') {
+      console.warn('[DiffRange] Versions mode invariant: showrevision arrived with start=' + origStartStr + ' (expected none)');
+    }
+
     // Cache each showrevision's `end` onto whichever listitem is currently
     // SelectedTile — at XHR.open() time, Docs has already moved selection
     // to the target of this request (verified; see "Auto-fired showrevision"
@@ -162,7 +177,12 @@ function revisionInterceptorFunc(): void {
     // Init capture: on panel open, dropdown switch, or re-entry after the
     // back arrow, Docs auto-fires showrevision for the selected version
     // with no click involved. drInitCapture is one-shot — consume on claim.
-    if (document.body?.dataset.drInitCapture) armBothOnSelected('drInitCapture');
+    // We track whether *this* XHR was the init-capture claimant so we can
+    // detect the "init capture fired with no start" failure mode below
+    // (re-entry from a session that left Highlight changes unchecked) and
+    // re-arm for the follow-up XHR our content script will produce.
+    const wasInitCapture = !!document.body?.dataset.drInitCapture;
+    if (wasInitCapture) armBothOnSelected('drInitCapture');
     // Arrow-burst capture: Docs fires a pre-expand fetch (cancelled) and
     // then the real post-expand fetch for arrow clicks. The first consumes
     // the drCaptureMode set by mousedown, so without this re-arm the real
@@ -397,6 +417,16 @@ function revisionInterceptorFunc(): void {
       // the class on the listitem forever and confuse waiters.
       delete document.body.dataset.drCaptureMode;
       document.querySelector('.dr-pending-capture')?.classList.remove('dr-pending-capture');
+
+      // Init-capture re-arm: if this XHR claimed drInitCapture but came in
+      // without `start`, the capture branch above couldn't write overrides
+      // (no range to capture). Re-arm so the next showrevision — typically
+      // the one our content script triggered by toggling Highlight changes
+      // synchronously in armIfChromecoverAdded — has a chance to capture.
+      if (wasInitCapture && captureMode === 'both' && origStart === null) {
+        document.body.dataset.drInitCapture = '1';
+        console.log('[DiffRange] init-capture re-armed (no start on init XHR; awaiting follow-up)');
+      }
     }
 
     // Rewrite uses the dataset values — the shared-DOM canonical store.

@@ -264,6 +264,22 @@ export async function clickDiffFullHistory(page: Page): Promise<void> {
 }
 
 /**
+ * Click the Diffs|Versions mode toggle. Triggers a Highlight-changes toggle
+ * under the hood, so we wait for the resulting refetch to settle.
+ */
+export async function clickModeToggle(page: Page, mode: 'diffs' | 'versions'): Promise<void> {
+  await page.locator(mode === 'diffs' ? '.dr-mode-diffs' : '.dr-mode-versions').click();
+  await waitForCaptureSettled(page);
+}
+
+/** Read the current `body.dataset.drMode` (defaults to 'diffs' if unset). */
+export async function getMode(page: Page): Promise<'diffs' | 'versions'> {
+  return page.evaluate(() => {
+    return document.body.dataset.drMode === 'versions' ? 'versions' : 'diffs';
+  });
+}
+
+/**
  * Click the date/time label on the listitem at `idx`. The label area is a
  * rename textarea that Docs would normally focus on click — the extension
  * suppresses that focus so the click acts purely as a version selection,
@@ -387,9 +403,15 @@ export interface DiffContents {
   after: string;
 }
 
-/** One parsed showrevision response: its rev range and extracted contents. */
+/**
+ * One parsed showrevision response: its rev range and extracted contents.
+ *
+ * `start` is omitted when the URL didn't include one — that's a Versions-mode
+ * response (Docs renders it as a single-version view, no diff annotations,
+ * `before` should always end up empty).
+ */
 export interface DiffResponseEntry {
-  start: number;
+  start?: number;
   end: number;
   contents: DiffContents;
 }
@@ -452,14 +474,22 @@ export function parseShowRevisionBody(body: string): DiffContents {
   const before: string[] = [];
   const after: string[] = [];
   const sortedPositions = Array.from(positions.keys()).sort((a, b) => a - b);
-  for (const p of sortedPositions) {
-    const ch = positions.get(p)!;
-    const dt = dtAt(p);
-    if (dt === 2) before.push(ch);
-    else if (dt === 1) after.push(ch);
-    else {
-      before.push(ch);
-      after.push(ch);
+  // No `revision_diff` annotations → single-version (Versions-mode) response.
+  // Visually that's just the document at one revision — no before-state to
+  // contrast — so report `before` as empty rather than duplicating `after`,
+  // which is what the dt=0 path would otherwise do for every position.
+  if (diffs.length === 0) {
+    for (const p of sortedPositions) after.push(positions.get(p)!);
+  } else {
+    for (const p of sortedPositions) {
+      const ch = positions.get(p)!;
+      const dt = dtAt(p);
+      if (dt === 2) before.push(ch);
+      else if (dt === 1) after.push(ch);
+      else {
+        before.push(ch);
+        after.push(ch);
+      }
     }
   }
   return { before: before.join(''), after: after.join('') };
@@ -494,7 +524,35 @@ export async function extractDiffContents(
   const entries = diffResponses.all();
   throw new Error(
     `extractDiffContents: no showrevision response matching ${start}..${end} ` +
-    `(saw ${entries.length} responses: ${entries.map((e) => `${e.start}..${e.end}`).join(', ')})`
+    `(saw ${entries.length} responses: ${entries.map((e) => `${e.start ?? '?'}..${e.end}`).join(', ')})`
+  );
+}
+
+/**
+ * Versions-mode counterpart of `extractDiffContents`. Looks for the latest
+ * showrevision response whose URL had no `start` and matches `end`. Versions
+ * mode requests are single-version views, so the parsed `before` is always
+ * empty and `after` is the version's full content.
+ */
+export async function extractVersionContents(
+  page: Page,
+  diffResponses: DiffResponseBuf,
+  expectedEnd: number,
+  timeoutMs = 5000
+): Promise<DiffContents> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const entries = diffResponses.all();
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const e = entries[i];
+      if (e.start === undefined && e.end === expectedEnd) return e.contents;
+    }
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  const entries = diffResponses.all();
+  throw new Error(
+    `extractVersionContents: no start-less showrevision response matching end=${expectedEnd} ` +
+    `(saw ${entries.length} responses: ${entries.map((e) => `${e.start ?? '?'}..${e.end}`).join(', ')})`
   );
 }
 

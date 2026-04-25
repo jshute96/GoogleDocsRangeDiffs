@@ -93,6 +93,17 @@ view (unchecked → URL has only `end`). Each toggle fires a fresh
 twice returns the checkbox to its initial state. SelectedTile stays put
 (verified — no class changes observed during a probe).
 
+#### State persistence across VH exit/reentry
+
+- Docs preserves the Highlight-changes checkbox state across exits — a
+  session that ended with the checkbox unchecked re-enters in the same
+  state. We re-check it synchronously in `armIfChromecoverAdded` so the
+  auto-init `showrevision` ideally goes out with `start`. Docs sometimes
+  reads stale internal state for that auto-fire, so we also have a
+  belt-and-braces re-arm: the interceptor re-arms `drInitCapture` if
+  init's URL had no `start`, letting the toggle's follow-up XHR (with
+  start) drive init capture.
+
 Locate the checkbox by label text — element ids and classes are dynamic:
 
 ```js
@@ -104,6 +115,56 @@ const input = label && document.getElementById(label.htmlFor);
 The older approach was to click a *different* listitem and then click
 back ("click-away-then-back"); that's now retained only inside the
 missing-start dance, which has its own constraints.
+
+### Diffs vs Versions mode
+
+The Diffs | Versions toggle (next to "Diff full history") is our own
+control, but it composes with Docs' Highlight-changes checkbox:
+
+- **Diffs mode** (default, `body.dataset.drMode='diffs'`): checkbox
+  checked, showrevisions arrive with both `start` and `end`, capture +
+  rewrite + highlights work as in the original extension.
+- **Versions mode** (`drMode='versions'`): checkbox unchecked,
+  overrides cleared, no per-row highlights lit. `showrevision` URLs
+  carry only `end`; the rewrite branch is a no-op (no overrides).
+
+**Mode transitions:**
+
+- **Diffs → Versions:** clear overrides + lit classes, single click on
+  the checkbox to uncheck it. Toggle's XHR fires for SelectedTile and
+  passes through the rewrite branch unrewritten, rendering the
+  single-version view.
+- **Versions → Diffs:** find SelectedTile, mark `.dr-pending-capture`
+  on it, set `drCaptureMode='both'`, single click on the checkbox to
+  re-check it. The toggle's XHR fires `?start=S&end=E`; the capture
+  branch records both bounds and lights From=To on selected.
+
+**Per-row buttons in Versions mode:** `applyVersionsModeButtons` pivots
+on SelectedTile —
+
+- Selected: hide Start + End, show Diff with `.dr-btn-shown` only
+  (no `.dr-btn-highlighted` → unlit affordance).
+- Above selected (newer, lower index): show End only.
+- Below selected (older, higher index): show Start only.
+
+This means clicking any per-row button in Versions mode automatically
+hops back to Diffs with a divergent range anchored on the
+previously-selected revision. The button click handler awaits
+`enterDiffsMode()` (which captures `start+end` for the selected via the
+toggle's XHR) before issuing the target click — without that, the
+target's `from`/`to` capture wouldn't have a `newStart`/`newEnd` to
+combine with, and would collapse to From=To=target.
+
+`refreshButtonVisibility` dispatches between `applyVersionsModeButtons`
+and `updateInBetweenHighlights` based on `getMode()`, called from
+`injectVersionButtons` on every body MutationObserver tick.
+
+**Sentinel for the async checkbox change handler:** Docs fires the
+checkbox-driven `showrevision` ~300ms after `.click()` — no synchronous
+signal. Content-revisions sets `body.dataset.drToggleRefetchPending`
+before each toggle; the interceptor clears it on the next `showrevision`
+seen (unconditional, regardless of rewrite). `waitForCaptureSettled`
+polls for it so tests don't read the rewrite log too early.
 
 ### Label (date) clicks vs body clicks
 

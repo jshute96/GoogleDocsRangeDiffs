@@ -48,11 +48,18 @@ import type { Page } from '@playwright/test';
  */
 export interface VersionRecorder {
   versions: DiffContents[];
+  /**
+   * `end` revision number per listitem index, parallel to `versions`. The
+   * sweep reads this from `body.dataset.drOverrideEnd` after each click —
+   * Versions-mode tests use it to look up the matching `?end=E` response
+   * (Versions URLs have no `start` and aren't matchable by the diff range).
+   */
+  versionEnds: number[];
   itemCount: number;
 }
 
 export function createRecorder(): VersionRecorder {
-  return { versions: [], itemCount: 0 };
+  return { versions: [], versionEnds: [], itemCount: 0 };
 }
 
 /**
@@ -93,6 +100,7 @@ export function registerContentChainSweep(recorder: VersionRecorder): void {
     expect(N).toBeGreaterThan(0);
 
     recorder.versions.length = 0;
+    recorder.versionEnds.length = 0;
 
     for (let i = 0; i < N; i++) {
       if (i > 0) {
@@ -102,7 +110,9 @@ export function registerContentChainSweep(recorder: VersionRecorder): void {
         await clickListitem(page, i);
       }
       const contents = await extractDiffContents(page, diffResponses);
+      const end = await page.evaluate(() => Number(document.body.dataset.drOverrideEnd || '0'));
       recorder.versions.push(contents);
+      recorder.versionEnds.push(end);
     }
 
     // Chain invariant: listitem[i]'s before (state immediately older than i)

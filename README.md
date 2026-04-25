@@ -16,14 +16,24 @@ This extension adds diff-between-versions functionality to Google Docs.
 4. Click **Diff full history** above the versions list to diff from the
    first revision to the newest — equivalent to **Start here** on the oldest
    version and **End here** on the newest in one click.
-5. Switching the dropdown (e.g., "All versions" → "Named versions") resets
+5. Use the **Diffs | Versions** toggle next to **Diff full history** to
+   switch between diff view and single-revision view:
+   - **Diffs** (default): the main panel shows the diff for the selected
+     range. From/To/Diff highlights mark the active range.
+   - **Versions**: the main panel shows just the content of the selected
+     revision (no diff annotations). Per-row buttons rearrange to
+     **End here** above the selected revision and **Start here** below;
+     **Diff here** appears on the selected revision as an unlit
+     affordance. Clicking any of those buttons hops back to **Diffs**
+     mode with a range anchored on the previously-selected revision.
+6. Switching the dropdown (e.g., "All versions" → "Named versions") resets
    the range selection.
-6. Clicking on a version's date/name acts only as selection — it no longer
+7. Clicking on a version's date/name acts only as selection — it no longer
    opens the rename text field. To rename a version, use the three-dots
    menu's **Name this version** / **Rename** item. This fixes some confusing
    and glitchy behavior where those clicks open a poorly-functioning edit box
    while also selecting the revision.
-7. Works around a Google Docs bug that breaks version navigation on
+8. Works around a Google Docs bug that breaks version navigation on
    large docs: Docs sometimes drops the `start` parameter from its
    revision-diff requests, leaving every version showing the same diff.
    An inference-based workaround for this is in the code but currently

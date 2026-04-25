@@ -41,12 +41,15 @@
         '.dr-version-button.dr-btn-highlighted { background:#1a73e8; color:#fff; border-color:#1a73e8; }' +
         '.dr-version-button.dr-btn-hidden { display:none; }' +
         // The "Diff here" button is the single-button state shown only on
-        // the endpoint when From=To (single-version diff). Default hidden
-        // via CSS so it's baseline-off even across class resets; the
-        // .dr-btn-shown toggle reveals it, and we restyle it with the
-        // solid-blue highlighted look since it's always "active" when visible.
+        // the endpoint when From=To (Diffs mode) or on the selected version
+        // (Versions mode). Default hidden via CSS so it's baseline-off even
+        // across class resets; .dr-btn-shown reveals it. The lit (solid blue)
+        // styling comes from .dr-btn-highlighted (the standard rule already
+        // applies to .dr-version-button.dr-btn-highlighted), so a Diff-here
+        // shown without the highlight class renders as the default white
+        // button — that's the Versions-mode "available action" appearance.
         '.dr-version-both-btn { display:none; }' +
-        '.dr-version-both-btn.dr-btn-shown { display:inline-block; background:#1a73e8; color:#fff; border-color:#1a73e8; }' +
+        '.dr-version-both-btn.dr-btn-shown { display:inline-block; }' +
         // Pin a min-width on the per-row buttons so a row that shows only
         // one of the pair renders the same width as a row that shows both
         // — otherwise the column collapses to the lone button's intrinsic
@@ -71,8 +74,16 @@
         // our button column. Force flex-start so the textarea hugs the
         // left edge of the Container instead.
         '.appsDocsRevisionsWizSidebarRevisionTitleTextboxContainer { align-items:flex-start !important; }' +
-        '.dr-full-history-row { padding:8px 16px; font-family:Google Sans,Roboto,sans-serif; }' +
+        '.dr-full-history-row { padding:8px 16px; font-family:Google Sans,Roboto,sans-serif; display:flex; align-items:center; gap:8px; }' +
         '.dr-full-history-btn { padding:4px 10px; font-size:12px; }' +
+        // Diffs|Versions segmented mode toggle. Two buttons share a single
+        // outline so they read as one control; the selected one fills solid
+        // blue (matching .dr-btn-highlighted's look on per-row buttons).
+        '.dr-mode-toggle { display:inline-flex; }' +
+        '.dr-mode-btn { padding:4px 10px; font-size:12px; font-family:inherit; border:1px solid #dadce0; background:#fff; color:#1a73e8; cursor:pointer; }' +
+        '.dr-mode-btn.dr-mode-diffs { border-radius:4px 0 0 4px; border-right-width:0; }' +
+        '.dr-mode-btn.dr-mode-versions { border-radius:0 4px 4px 0; }' +
+        '.dr-mode-btn.dr-mode-selected { background:#1a73e8; color:#fff; border-color:#1a73e8; }' +
         // Rename textareas show a text I-beam by default; since we've
         // disabled click-to-rename, show the same pointer cursor the rest
         // of the version row uses. Use :not(:focus) so that if rename is
@@ -118,8 +129,18 @@
         const suppress = (e: Event): void => { e.stopPropagation(); };
         b.addEventListener('mousedown', suppress);
         b.addEventListener('mouseup', suppress);
-        b.addEventListener('click', (e: Event) => {
+        b.addEventListener('click', async (e: Event) => {
           e.stopPropagation();
+          // In Versions mode the selected revision's `start` isn't known
+          // (Versions URLs only carry `end`). Switching via enterDiffsMode
+          // toggles Highlight changes ON with capture armed on SelectedTile,
+          // so the resulting showrevision lands `start=selS&end=selE` and
+          // the capture branch records both bounds — which the subsequent
+          // target click's `from`/`to` capture combines with to produce a
+          // range like `selS..targetE`.
+          if (getMode() === 'versions') {
+            await enterDiffsMode();
+          }
           if (isSelected(item) && captureForSelected(item, mode)) return;
           // Cancel any stale capture from a previous click that never produced
           // a showrevision request — otherwise the interceptor could associate
@@ -163,9 +184,12 @@
     setupVersionListListener();
     setupVersionTypeDropdownListener();
     restoreBothOnSelectedIfFlagged();
-    // Re-apply in-between highlights to any newly-added items (e.g., when the
-    // user expands a version's detailed sub-versions, new listitems appear).
-    updateInBetweenHighlights();
+    // Re-apply per-row button visibility on every observer tick — Versions
+    // mode pivots on SelectedTile (which moves on listitem clicks since the
+    // mousedown delegation doesn't intercept those in Versions mode), and
+    // Diffs mode's in-between highlights need to extend onto any newly-added
+    // listitems (e.g., expand-arrow adds detailed sub-versions).
+    refreshButtonVisibility();
   }
 
   // If body.dataset.drBothOnSelected is set (the last capture landed From and
@@ -347,6 +371,48 @@
     return true;
   }
 
+  // Apply per-row button visibility for Versions mode. Pivot is whichever
+  // listitem currently wears SelectedTile:
+  //   - Selected: hide Start + End, show Diff (unlit — Diff-here is an
+  //     available-action affordance, not active state, so no .dr-btn-highlighted).
+  //   - Above (newer than selected, lower index): show End only — clicking
+  //     it sets To=this and lifts us into a Diffs-mode range bounded above.
+  //   - Below (older, higher index): show Start only — sets From=this.
+  // Idempotent: clears its own per-row visibility classes (.dr-btn-hidden,
+  // .dr-btn-shown) before re-applying. Doesn't touch .dr-btn-highlighted /
+  // .dr-btn-in-between (Versions mode never lights up).
+  function applyVersionsModeButtons(): void {
+    const items = Array.from(document.querySelectorAll('[aria-label="Versions"] [role="listitem"]'));
+    const selIdx = items.findIndex((it) => isSelected(it));
+    const stale = document.querySelectorAll('.dr-btn-hidden, .dr-btn-shown');
+    for (let i = 0; i < stale.length; i++) {
+      stale[i].classList.remove('dr-btn-hidden');
+      stale[i].classList.remove('dr-btn-shown');
+    }
+    if (selIdx === -1) return;
+    for (let i = 0; i < items.length; i++) {
+      const fromBtn = items[i].querySelector('.dr-version-from-btn');
+      const toBtn = items[i].querySelector('.dr-version-to-btn');
+      const bothBtn = items[i].querySelector('.dr-version-both-btn');
+      if (i === selIdx) {
+        fromBtn?.classList.add('dr-btn-hidden');
+        toBtn?.classList.add('dr-btn-hidden');
+        bothBtn?.classList.add('dr-btn-shown');
+      } else if (i < selIdx) {
+        fromBtn?.classList.add('dr-btn-hidden');
+      } else {
+        toBtn?.classList.add('dr-btn-hidden');
+      }
+    }
+  }
+
+  // Dispatch button-visibility refresh based on current mode. injectVersionButtons
+  // runs this on every body MutationObserver tick so visibility tracks state.
+  function refreshButtonVisibility(): void {
+    if (getMode() === 'versions') applyVersionsModeButtons();
+    else updateInBetweenHighlights();
+  }
+
   // Maintain derived states on the three per-row buttons (Start/End/Diff):
   //   - .dr-btn-in-between: light-blue fill on Start/End buttons of items
   //     strictly between the From- and To-highlighted items. Boundaries
@@ -393,7 +459,12 @@
       if (i >= hi) items[i].querySelector('.dr-version-to-btn')?.classList.add('dr-btn-hidden');
     }
     if (fromItem === toItem) {
-      fromItem.querySelector('.dr-version-both-btn')?.classList.add('dr-btn-shown');
+      const bothBtn = fromItem.querySelector('.dr-version-both-btn');
+      bothBtn?.classList.add('dr-btn-shown');
+      // Diffs-mode From=To: Diff-here represents the active range, so light
+      // it up. Versions mode also shows this button (via applyVersionsModeButtons)
+      // but without .dr-btn-highlighted, rendering it as the unlit affordance.
+      bothBtn?.classList.add('dr-btn-highlighted');
     }
   }
 
@@ -413,8 +484,10 @@
     else delete document.body.dataset.drOverrideEnd;
   }
 
-  // Inject the "Diff full history" action button at the top of the scrollable
-  // versions area, above the "This month" / date section heading. Idempotent.
+  // Inject the top-row controls (Diff full history + Diffs|Versions mode
+  // toggle) at the top of the scrollable versions area, above the
+  // "This month" / date section heading. Idempotent — early-returns if
+  // the row already exists.
   function injectFullHistoryButton(): void {
     const scrollable = document.querySelector('.DocsSidebarComponentsScrollableContentContainer');
     if (!scrollable || scrollable.querySelector('.dr-full-history-row')) return;
@@ -427,11 +500,130 @@
     btn.className = 'dr-version-button dr-full-history-btn';
     btn.addEventListener('click', (e: Event) => {
       e.stopPropagation();
-      handleFullHistoryClick();
+      void handleFullHistoryClick();
     });
     row.appendChild(btn);
 
+    const modeWrap = document.createElement('div');
+    modeWrap.className = 'dr-mode-toggle';
+    const diffsBtn = document.createElement('button');
+    diffsBtn.textContent = 'Diffs';
+    diffsBtn.className = 'dr-mode-btn dr-mode-diffs';
+    diffsBtn.addEventListener('click', (e: Event) => {
+      e.stopPropagation();
+      void setMode('diffs');
+    });
+    const versionsBtn = document.createElement('button');
+    versionsBtn.textContent = 'Versions';
+    versionsBtn.className = 'dr-mode-btn dr-mode-versions';
+    versionsBtn.addEventListener('click', (e: Event) => {
+      e.stopPropagation();
+      void setMode('versions');
+    });
+    modeWrap.appendChild(diffsBtn);
+    modeWrap.appendChild(versionsBtn);
+    row.appendChild(modeWrap);
+
     scrollable.insertBefore(row, scrollable.firstChild);
+
+    updateModeButtons();
+  }
+
+  function getMode(): 'diffs' | 'versions' {
+    return document.body.dataset.drMode === 'versions' ? 'versions' : 'diffs';
+  }
+
+  function updateModeButtons(): void {
+    const mode = getMode();
+    const all = document.querySelectorAll('.dr-mode-btn');
+    for (let i = 0; i < all.length; i++) all[i].classList.remove('dr-mode-selected');
+    const selSel = mode === 'diffs' ? '.dr-mode-diffs' : '.dr-mode-versions';
+    document.querySelector(selSel)?.classList.add('dr-mode-selected');
+  }
+
+  // Wait for a refetch fired by toggling Highlight changes to settle.
+  // The interceptor clears drToggleRefetchPending when the showrevision XHR
+  // arrives at XHR.open() — observe attribute changes on body so we wake
+  // up exactly when the rewrite branch finishes, not after some fixed delay.
+  // Falls through after `timeoutMs` so a stuck toggle doesn't wedge the UI.
+  function waitForToggleRefetchSettled(timeoutMs = 3000): Promise<void> {
+    if (!document.body.dataset.drToggleRefetchPending) return Promise.resolve();
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => { obs.disconnect(); resolve(); }, timeoutMs);
+      const obs = new MutationObserver(() => {
+        if (!document.body.dataset.drToggleRefetchPending) {
+          clearTimeout(timeout);
+          obs.disconnect();
+          resolve();
+        }
+      });
+      obs.observe(document.body, { attributes: true, attributeFilter: ['data-dr-toggle-refetch-pending'] });
+    });
+  }
+
+  // Set the Diffs|Versions mode and trigger the appropriate refetch on the
+  // currently-selected revision. Returns a promise that resolves once the
+  // resulting showrevision XHR has been intercepted.
+  async function setMode(newMode: 'diffs' | 'versions'): Promise<void> {
+    if (getMode() === newMode) return;
+    if (newMode === 'versions') await enterVersionsMode();
+    else await enterDiffsMode();
+  }
+
+  // Enter Versions mode: clear override + lit state, apply Versions-mode
+  // button visibility (Start below selected, End above, Diff on selected
+  // unlit), and uncheck Highlight changes so Docs renders the selected
+  // revision as a single-version view (showrevision URL goes out as ?end=E
+  // with no start).
+  async function enterVersionsMode(): Promise<void> {
+    document.body.dataset.drMode = 'versions';
+    updateModeButtons();
+    // Drop overrides so the rewrite branch is a no-op for the toggle's XHR
+    // (and for any subsequent listitem clicks while in this mode).
+    setDatasetOverrides(null, null);
+    delete document.body.dataset.drBothOnSelected;
+    // Clear lit + in-between styling. .dr-btn-hidden / .dr-btn-shown are
+    // re-applied immediately by applyVersionsModeButtons.
+    const lit = document.querySelectorAll('.dr-btn-highlighted, .dr-btn-in-between');
+    for (let i = 0; i < lit.length; i++) {
+      lit[i].classList.remove('dr-btn-highlighted');
+      lit[i].classList.remove('dr-btn-in-between');
+    }
+    applyVersionsModeButtons();
+    const checkbox = findHighlightChangesCheckbox();
+    if (!checkbox || !checkbox.checked) return;
+    document.body.dataset.drToggleRefetchPending = '1';
+    checkbox.click();
+    await waitForToggleRefetchSettled();
+  }
+
+  // Enter Diffs mode: re-check Highlight changes so Docs fires showrevision
+  // with start+end for the selected revision, and arm capture so the
+  // resulting URL's range becomes both bounds (From=To on selected, with
+  // Diff-here lit). We arm capture inline on the SelectedTile rather than
+  // via drInitCapture, because armBothOnSelected re-resolves SelectedTile at
+  // XHR.open() time — Docs occasionally re-renders listitems between the
+  // click and the XHR, which can leave a transient window where no element
+  // has the SelectedTile class and armBothOnSelected silently bails.
+  async function enterDiffsMode(): Promise<void> {
+    document.body.dataset.drMode = 'diffs';
+    updateModeButtons();
+    const checkbox = findHighlightChangesCheckbox();
+    if (!checkbox || checkbox.checked) return;
+    const items = document.querySelectorAll('[aria-label="Versions"] [role="listitem"]');
+    let selected: Element | null = null;
+    for (let i = 0; i < items.length; i++) {
+      if (isSelected(items[i])) { selected = items[i]; break; }
+    }
+    if (selected) {
+      const oldPending = document.querySelector('.dr-pending-capture');
+      if (oldPending) oldPending.classList.remove('dr-pending-capture');
+      selected.classList.add('dr-pending-capture');
+      document.body.dataset.drCaptureMode = 'both';
+    }
+    document.body.dataset.drToggleRefetchPending = '1';
+    checkbox.click();
+    await waitForToggleRefetchSettled();
   }
 
   // Handler for the "Diff full history" button. Sets the range to
@@ -441,13 +633,22 @@
   //
   // Strategy: apply highlights + overrides ourselves, then force Docs to
   // re-issue a showrevision so the rewritten URL is fetched. The newest
-  // version (item[0]) must end up as the Docs-selected tile:
-  //   - If item[0] is NOT currently selected: click it (selects + refetch).
-  //   - If item[0] IS currently selected: toggle "Highlight changes" twice
-  //     to force a re-fetch without disturbing the selection.
-  // drSuppressCapture is set during the listitem click so the mousedown
-  // delegation doesn't overwrite the overrides we just set (belt-and-braces;
-  // .click() doesn't fire mousedown).
+  // version (item[0]) must end up as the Docs-selected tile.
+  //
+  // Refetch path depends on Highlight-changes state and which item is selected:
+  //   - Checkbox unchecked (Versions mode): a single toggle re-checks it
+  //     and fires showrevision for whoever is currently selected. The
+  //     rewrite branch picks up our overrides, so the URL goes out as
+  //     start=1&end=maxRev regardless of the natural range.
+  //   - Checkbox checked + item[0] selected: toggle twice (Diffs mode's
+  //     "force refetch on selected" trick).
+  //   - Checkbox checked + item[0] not selected: click item[0] directly
+  //     (selects + fires showrevision; rewrite branch overrides).
+  //
+  // If item[0] wasn't already selected, follow up with a programmatic
+  // click on it so it ends up as the Docs-selected tile. drSuppressCapture
+  // wraps that click so the mousedown delegation doesn't clobber the
+  // overrides we just set (belt-and-braces; .click() doesn't fire mousedown).
   function handleFullHistoryClick(): void {
     const maxRevStr = document.body.dataset.drMaxRev;
     if (!maxRevStr) {
@@ -494,17 +695,27 @@
     // our overrides.
     delete document.body.dataset.drInitCapture;
 
-    if (isSelected(first)) {
-      // item[0] already selected: Docs treats a click on it as a no-op. Toggle
-      // Highlight changes twice to force two showrevision XHRs the interceptor
-      // rewrites; SelectedTile stays on item[0]. If the checkbox is missing
-      // (unlikely), overrides + highlights are still updated; no refetch
-      // happens, which is harmless — the user can pick another version to
-      // produce one.
-      const checkbox = findHighlightChangesCheckbox();
-      if (!checkbox) return;
+    // Diff full history is inherently a Diffs-mode action.
+    document.body.dataset.drMode = 'diffs';
+    updateModeButtons();
+
+    const checkbox = findHighlightChangesCheckbox();
+    if (!checkbox) return;
+
+    if (!checkbox.checked) {
+      // Versions → Diffs transition: a single toggle fires one rewriteable
+      // showrevision for the currently-selected revision.
+      document.body.dataset.drToggleRefetchPending = '1';
+      checkbox.click();
+    } else if (isSelected(first)) {
+      // Already in Diffs with first selected: Docs treats a click on it
+      // as a no-op, so toggle twice for two showrevisions.
       toggleHighlightChangesTwice(checkbox);
-    } else {
+    }
+
+    if (!isSelected(first)) {
+      // Make sure first ends up selected. fires another showrevision that
+      // also gets rewritten to 1:maxRev.
       document.body.dataset.drSuppressCapture = '1';
       try {
         first.click();
@@ -529,6 +740,10 @@
     }
     setDatasetOverrides(null, null);
     delete document.body.dataset.drBothOnSelected;
+    // Dropdown switches reload the versions list; treat as a fresh start
+    // and snap back to Diffs mode (the default).
+    document.body.dataset.drMode = 'diffs';
+    updateModeButtons();
     console.log('[DiffRange] revision overrides reset');
   }
 
@@ -615,6 +830,12 @@
       // (Note: .click() doesn't dispatch mousedown, so this mostly guards
       // against future synthetic mousedown dispatches.)
       if (document.body.dataset.drSuppressCapture) return;
+      // In Versions mode, all listitem mousedowns (body, label, arrow) are
+      // pure single-version navigation — Docs fires showrevision?end=E and
+      // we want it unrewritten. No pending-capture, no captureMode, no
+      // arrow-burst. Arrows expand/collapse the list naturally; our button
+      // injection re-runs via the body MutationObserver.
+      if (getMode() === 'versions') return;
       const item = (e.target as Element).closest('[role="listitem"]');
       if (!item) return;
       // Arrow clicks: Docs often fires *two* showrevisions in quick
@@ -803,6 +1024,21 @@
           // Must be synchronous — Docs may fire the auto-showrevision
           // within this same mutation batch.
           setDatasetOverrides(null, null);
+          // Re-entering VH is a fresh start — reset to Diffs mode (the
+          // default). updateModeButtons runs in injectVersionButtons after
+          // the row is built; we just set the dataset here.
+          document.body.dataset.drMode = 'diffs';
+          // Docs preserves the Highlight-changes checkbox state across VH
+          // exits, so a session that ended in Versions mode comes back
+          // with the checkbox unchecked. Flip it back synchronously now —
+          // Docs' subsequent auto-init showrevision will then go out with
+          // `start`, init-capture works as normal, and we avoid a
+          // post-hoc heal that would race with that auto-fire.
+          const checkbox = findHighlightChangesCheckbox();
+          if (checkbox && !checkbox.checked) {
+            checkbox.click();
+            console.log('[DiffRange] version history entry: re-checked stale Highlight changes');
+          }
           console.log('[DiffRange] version history entry detected — init capture armed');
           return;
         }
