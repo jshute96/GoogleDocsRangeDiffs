@@ -27,8 +27,8 @@ One-line descriptions of every source file, grouped by directory.
 | `src/manifest.json` | Manifest V3 config: permissions, content scripts, service worker |
 | `src/types.d.ts` | Global type declarations: Window extensions, service worker globals |
 | `src/background.ts` | Service worker — handles `injectRevisionInterceptor` message, loads `background-injected.js` |
-| `src/background-injected.ts` | MAIN world: XHR/fetch interceptor, max-revision tracking, missing-start workaround, `showRevisions()`, `openVersionHistory()`, `drSimulateMissingStart()` |
-| `src/content-revisions.ts` | Content script: injects From/To + Diff-full-history buttons, wires selection-capture flow, runs the missing-start dance |
+| `src/background-injected.ts` | MAIN world: XHR/fetch interceptor, max-revision tracking, polarity-fix workaround (issue #2), `showRevisions()`, `openVersionHistory()` |
+| `src/content-revisions.ts` | Content script: injects From/To + Diff-full-history buttons, wires selection-capture flow, runs the polarity-fix Highlight-changes toggle |
 
 ## Scripts (`scripts/`)
 
@@ -49,7 +49,7 @@ One-line descriptions of every source file, grouped by directory.
 | `testing/extension/playwright.config.ts` | Playwright config for live tests with extension |
 | `testing/extension/fixtures.ts` | Worker-scoped fixtures: CDP context, shared `page` with VH open, `logs`, `diffResponses` buffers |
 | `testing/extension/smoke.spec.ts` | Smoke test: verifies extension UI is injected into the shared VH page |
-| `testing/extension/helpers.ts` | Extension test helpers: doc/VH setup, range-state reads, click actions, showrevision parser, missing-start toggles |
+| `testing/extension/helpers.ts` | Extension test helpers: doc/VH setup, range-state reads, click actions, showrevision parser, capture-settled polling |
 | `testing/extension/version-range-shared.ts` | Shared scaffolding for split version-range specs: sweep registrar, per-file recorder, content assertions |
 | `testing/extension/version-range-basic.spec.ts` | Behavioral tests: initial entry, content-chain sweep, basic selection, oldest-version edges |
 | `testing/extension/version-range-from-to.spec.ts` | Behavioral tests: From/To bounds, range collapse on listitem click, URL rewrite |

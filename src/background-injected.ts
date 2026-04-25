@@ -271,9 +271,11 @@ function revisionInterceptorFunc(): void {
           newEnd = origEnd;
           if (newStart == null || newStart >= newEnd) {
             // Fallback takes both bounds from this version — needs origStart.
-            // If origStart is missing (Docs bug, workaround couldn't infer),
-            // skip the fallback entirely; the capture becomes end-only rather
-            // than producing a bogus range.
+            // If origStart is missing (Docs bug; polarity-fix already
+            // retried and gave up, or we're on the first pass before the
+            // polarity-fix branch above kicks in), skip the fallback
+            // entirely; the capture becomes end-only rather than
+            // producing a bogus range.
             if (origStart !== null) {
               newStart = origStart;
               tookBoth = true;
@@ -350,9 +352,9 @@ function revisionInterceptorFunc(): void {
 
       // Consume the capture flag — only one URL rewrite per button click.
       // Also clear any lingering .dr-pending-capture: the normal capture
-      // branch removes it on success, but paths that fall through (missing
-      // start with workaround disabled, for instance) would otherwise leave
-      // the class on the listitem forever and confuse waiters.
+      // branch removes it on success, but paths that fall through (e.g.,
+      // polarity-fix retry exhaustion) would otherwise leave the class on
+      // the listitem forever and confuse waiters.
       delete document.body.dataset.drCaptureMode;
       // Successful capture also clears the polarity-fix retry counter so
       // the next user click starts fresh — otherwise a single doc-loop
