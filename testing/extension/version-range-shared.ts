@@ -29,8 +29,6 @@ import {
   extractDiffContents,
   clickListitem,
   resetRange,
-  setSimulateMissingStart,
-  setEnableMissingStartWorkaround,
   type DiffContents,
   type DiffResponseBuf,
 } from './helpers';
@@ -64,21 +62,14 @@ export function createRecorder(): VersionRecorder {
 
 /**
  * Registers the shared `beforeEach` used by all version-range specs: clears
- * logs, disables simulation flags, and resets the range via exit/re-enter VH
- * (which fires a fresh init-capture so every test starts from item[0]).
+ * logs and resets the range via exit/re-enter VH (which fires a fresh
+ * init-capture so every test starts from item[0]).
  */
 export function registerBeforeEachReset(): void {
   test.beforeEach(async ({ page, logs }) => {
     // Clear logs BEFORE the reset so the init-capture entries from this reset
     // are the only ones the test sees.
     logs.clear();
-    // Clear any simulation flags that a prior test may have left on —
-    // resetRange exits and re-enters VH, which fires init-capture; we want
-    // init-capture to run under normal (non-simulated) conditions so the
-    // baseline range is populated correctly before any simulation test
-    // enables its flags.
-    await setSimulateMissingStart(page, false);
-    await setEnableMissingStartWorkaround(page, false);
     await resetRange(page);
   });
 }

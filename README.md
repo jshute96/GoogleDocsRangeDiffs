@@ -36,11 +36,12 @@ This extension adds diff-between-versions functionality to Google Docs.
 8. Works around a Google Docs bug that breaks version navigation on
    large docs: Docs sometimes drops the `start` parameter from its
    revision-diff requests, leaving every version showing the same diff.
-   An inference-based workaround for this is in the code but currently
-   **off by default** while we try an alternative approach. It can be
-   re-enabled via `drEnableMissingStartWorkaround(true)`. See
+   The extension toggles "Highlight changes" once when it sees a
+   no-`start` URL with a pending capture, which makes Docs send a
+   usable `start+end` URL that the interceptor can complete the
+   capture from. See
    [`docs/fix-google-docs-start-version-bug.md`](docs/fix-google-docs-start-version-bug.md)
-   for more details.
+   for the full polarity model and the polarity-fix design.
 
 ### Console API
 
@@ -48,11 +49,6 @@ From the browser console on a Google Docs page:
 
 - `showRevisions(start, end)` — set a revision range and show the diff
 - `openVersionHistory()` — open the Version History panel programmatically
-- `drSimulateMissingStart(true/false)` — simulate the Docs bug that drops
-  the `start` param from revision URLs (for testing the workaround)
-- `drEnableMissingStartWorkaround(true/false)` — turn the workaround on
-  (off by default in the extension; combine with `drSimulateMissingStart`
-  to watch the workaround repair the simulated bug)
 
 ## Installation
 

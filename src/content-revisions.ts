@@ -824,11 +824,11 @@
           blockRenameFocusTimer = null;
         }, 300);
       }
-      // Skip programmatic events from the From / To button handlers, the
-      // missing-start dance's neighbor click, and the full-history listitem
-      // click — they've already set up the correct capture state themselves.
-      // (Note: .click() doesn't dispatch mousedown, so this mostly guards
-      // against future synthetic mousedown dispatches.)
+      // Skip programmatic events from the From / To button handlers and
+      // the full-history listitem click — they've already set up the
+      // correct capture state themselves. (Note: .click() doesn't dispatch
+      // mousedown, so this mostly guards against future synthetic
+      // mousedown dispatches.)
       if (document.body.dataset.drSuppressCapture) return;
       // In Versions mode, all listitem mousedowns (body, label, arrow) are
       // pure single-version navigation — Docs fires showrevision?end=E and
@@ -911,24 +911,13 @@
       setupVersionTypeDropdownListener();
     }).observe(document.body, { childList: true, subtree: true });
 
-    // Attribute observer for the missing-start workaround handshake. The
-    // MAIN-world interceptor sets body.dataset.drMissingStartDance to the
-    // target listitem index when it can't infer `start` from cached data
-    // and needs the content script to drive the neighbor-click-then-reclick
-    // "dance". The callback is delivered as a microtask at the end of the
-    // current task — after the XHR.open call that set the attribute has
-    // returned and its synchronous stack unwound.
-    new MutationObserver(() => {
-      runMissingStartDanceIfFlagged();
-    }).observe(document.body, { attributes: true, attributeFilter: ['data-dr-missing-start-dance'] });
-
     // Attribute observer for the polarity-fix handshake. The interceptor
     // sets body.dataset.drPendingPolarityFix when it sees a no-start URL
-    // with a pending capture (and the legacy workaround is off). Toggle
-    // the Highlight-changes checkbox once: under either polarity, *one*
-    // checkbox state produces `start+end` URLs, so one toggle surfaces
-    // a usable read. The follow-up showrevision goes through the
-    // interceptor with drCaptureMode still armed, completing the capture.
+    // with a pending capture. Toggle the Highlight-changes checkbox once:
+    // under either polarity, *one* checkbox state produces `start+end`
+    // URLs, so one toggle surfaces a usable read. The follow-up
+    // showrevision goes through the interceptor with drCaptureMode still
+    // armed, completing the capture.
     new MutationObserver(() => {
       runPolarityFixIfFlagged();
     }).observe(document.body, { attributes: true, attributeFilter: ['data-dr-pending-polarity-fix'] });
@@ -949,82 +938,6 @@
     document.body.dataset.drToggleRefetchPending = '1';
     checkbox.click();
     console.log('[DiffRange] polarity fix: toggled Highlight changes (now ' + (checkbox.checked ? 'checked' : 'unchecked') + ')');
-  }
-
-  // Missing-start workaround (issue #2): when Docs fires a showrevision
-  // without `start` (a sticky Docs bug on large docs), the MAIN-world
-  // interceptor can't infer the target's `start` without cached data.
-  // It sets body.dataset.drMissingStartDance = <target listitem index>
-  // and we drive a two-click sequence:
-  //   1. Click the next-older listitem with drSuppressCapture. The click's
-  //      showrevision still fires (missing start too — we only need its
-  //      `end`, which the interceptor caches onto the now-SelectedTile
-  //      regardless of capture state).
-  //   2. Re-click the target. Arm drCaptureMode='both' + pending-capture
-  //      explicitly — element.click() fires only the click event, not
-  //      mousedown, so our delegation listener won't run. With the
-  //      neighbor's `end` cached, the interceptor now infers
-  //      start = cachedEnd + 1 and rewrites the URL correctly.
-  function runMissingStartDanceIfFlagged(): void {
-    const idxStr = document.body.dataset.drMissingStartDance;
-    if (!idxStr) return;
-
-    const stashedMode = document.body.dataset.drMissingStartDanceMode ?? 'both';
-    delete document.body.dataset.drMissingStartDance;
-    delete document.body.dataset.drMissingStartDanceMode;
-
-    const idx = parseInt(idxStr, 10);
-    if (!Number.isFinite(idx) || idx < 0) return;
-
-    const items = document.querySelectorAll('[aria-label="Versions"] [role="listitem"]');
-    const target = items[idx] as HTMLElement | undefined;
-    const neighbor = items[idx + 1] as HTMLElement | undefined;
-    if (!target || !neighbor) {
-      console.log('[DiffRange] missing-start dance: target or neighbor listitem missing (idx=' + idx + ')');
-      return;
-    }
-
-    console.log('[DiffRange] missing-start dance: clicking neighbor idx=' + (idx + 1) + ' to learn its end');
-    // Suppress capture: we don't want the neighbor click to re-arm
-    // drCaptureMode='both' on neighbor (which would also flip highlights
-    // onto it). The top-of-interceptor end-caching runs regardless and is
-    // all we need from this click. .click() doesn't fire mousedown, so the
-    // versions-list delegation won't see this click anyway — the suppress
-    // flag is belt-and-braces for any future synthetic mousedown.
-    document.body.dataset.drSuppressCapture = '1';
-    try {
-      neighbor.click();
-    } finally {
-      delete document.body.dataset.drSuppressCapture;
-    }
-
-    // Restore the pre-dance overrides (stashed by the interceptor on bail).
-    // The capture branch on the target re-click reads them as "current"
-    // values so 'from' / 'to' modes correctly combine with the existing
-    // opposite endpoint. If there was no prior override (unusual), the
-    // stash keys are absent and we leave overrides empty.
-    const stashedStart = document.body.dataset.drMissingStartDanceStashStart;
-    const stashedEnd = document.body.dataset.drMissingStartDanceStashEnd;
-    if (stashedStart) document.body.dataset.drOverrideStart = stashedStart;
-    if (stashedEnd) document.body.dataset.drOverrideEnd = stashedEnd;
-    delete document.body.dataset.drMissingStartDanceStashStart;
-    delete document.body.dataset.drMissingStartDanceStashEnd;
-
-    // Re-click target synchronously so the dance runs as one uninterrupted
-    // sequence — a setTimeout(0) here leaves a window where drCaptureMode
-    // and drMissingStartDance are both clear, which any waiter polling for
-    // "settled" state could mistake for done. Arm capture manually since
-    // .click() fires only click, not mousedown. Use the mode the user's
-    // original click carried (stashed above) so "Start here" / "End here"
-    // logic on the re-click combines with existing overrides the same way
-    // a normal (non-missing-start) capture would.
-    console.log('[DiffRange] missing-start dance: re-clicking target idx=' + idx + ' (mode=' + stashedMode + ')');
-    const oldPending = document.querySelector('.dr-pending-capture');
-    if (oldPending) oldPending.classList.remove('dr-pending-capture');
-
-    target.classList.add('dr-pending-capture');
-    document.body.dataset.drCaptureMode = stashedMode;
-    target.click();
   }
 
   // Detect entry into version history view — Docs attaches the revisions

@@ -104,23 +104,6 @@ function revisionInterceptorFunc(): void {
     const query = qIdx === -1 ? '' : url.substring(qIdx + 1);
     const searchParams = new URLSearchParams(query);
 
-    // Simulation mode for tests (see issue #2): pretend Docs dropped `start`
-    // from the URL. Strips it both from the outgoing request (so Docs sees
-    // the same malformed URL the real bug produces) and from our reading
-    // (so the capture/workaround path runs). The override-rewrite branch
-    // below can still reinsert `start` from body.dataset.drOverrideStart,
-    // which is how the workaround lands a correct URL on the re-click.
-    let simulatedMissingStart = false;
-    if (document.body?.dataset.drSimulateMissingStart) {
-      if (searchParams.has('start')) {
-        simulatedMissingStart = true;
-        searchParams.delete('start');
-        // Rebuild so any subsequent `return url` path (e.g., the dance bail
-        // below) sends the stripped URL to Docs, mirroring the real bug.
-        url = base + '?' + searchParams.toString();
-      }
-    }
-
     const origStartStr = searchParams.get('start');
     const origEndStr = searchParams.get('end');
 
@@ -136,12 +119,12 @@ function revisionInterceptorFunc(): void {
       console.log('[DiffRange] Versions mode: incoming URL had start=' + origStartStr + ' (likely polarity inversion); will strip on rewrite');
     }
 
-    // Cache each showrevision's `end` onto whichever listitem is currently
-    // SelectedTile — at XHR.open() time, Docs has already moved selection
-    // to the target of this request (verified; see "Auto-fired showrevision"
-    // in notes). Used by the missing-start workaround to infer start from
-    // the next-older listitem's cached end, even if the dance's neighbor
-    // click happened with drSuppressCapture (which skips the capture branch).
+    // Cache each showrevision's `start`/`end` onto whichever listitem is
+    // currently SelectedTile — at XHR.open() time, Docs has already moved
+    // selection to the target of this request (verified; see "Auto-fired
+    // showrevision" in notes). Used by `captureForSelected` so a click on
+    // the already-selected version can synthesize a captured range without
+    // firing a redundant XHR.
     if (origEndStr) {
       const oe = parseInt(origEndStr, 10);
       if (Number.isFinite(oe)) {
@@ -193,14 +176,12 @@ function revisionInterceptorFunc(): void {
     // every request in the window re-arm (last-write-wins on overrides).
     if (document.body?.dataset.drArrowBurst) armBothOnSelected(null);
 
-    // Log request info up front — everything that follows (workaround
-    // logs, rewrite logs) refers to this request, so the reader sees it
-    // in arrival order: simulation -> orig request -> handling -> outcome.
+    // Log request info up front — everything that follows (handling logs,
+    // rewrite logs) refers to this request, so the reader sees it in
+    // arrival order: orig request -> handling -> outcome.
     {
       const flags: string[] = [];
-      if (simulatedMissingStart) flags.push('simulated missing start');
-      // Don't double-log 'no start' when we just stripped it ourselves.
-      else if (!origStartStr) flags.push('no start');
+      if (!origStartStr) flags.push('no start');
       if (!origEndStr) flags.push('no end');
       const flagSuffix = flags.length ? ' (' + flags.join(', ') + ')' : '';
       const os = origStartStr ?? '?';
@@ -217,34 +198,31 @@ function revisionInterceptorFunc(): void {
     // accordingly, then update which version's buttons are highlighted.
     const captureMode = document.body?.dataset.drCaptureMode;
     if (captureMode) {
-      let origStart = origStartStr ? parseInt(origStartStr, 10) : null;
+      const origStart = origStartStr ? parseInt(origStartStr, 10) : null;
       const origEnd = origEndStr ? parseInt(origEndStr, 10) : null;
 
       // Missing-start handling (issue #2): Docs sometimes fires a
-      // showrevision without a `start` param on large docs; the bug is
-      // sticky in the polarity it leaves the session in (see
-      // docs/fix-google-docs-start-version-bug.md "Trigger" / "Recovery").
-      // With `start` missing, we can't read the target version's natural
-      // lower bound from the URL.
+      // showrevision without a `start` param on large docs — sticky in
+      // the polarity it leaves the session in (see
+      // docs/fix-google-docs-start-version-bug.md). With `start` missing
+      // we can't complete a capture from this URL, so schedule a single
+      // Highlight-changes toggle in the content script. Under both
+      // polarities, *one* of the two checkbox states produces a
+      // `start+end` URL, so one toggle surfaces a usable read; the
+      // follow-up XHR re-enters this capture branch with drCaptureMode
+      // still armed and completes the capture.
       //
-      // Default approach (the polarity-fix path): set drPendingPolarityFix
-      // and bail. Content script clicks the "Highlight changes" checkbox
-      // once; Docs fires a follow-up showrevision that — under either
-      // polarity — carries `start`, and that pass through the same capture
-      // branch with drCaptureMode still armed completes the capture.
+      // Skip when 'to' mode has a valid existing curStart < origEnd —
+      // the 'to' branch below uses only origEnd, so origStart isn't
+      // needed and a polarity-fix toggle would be wasted.
       //
-      // Legacy approach (dance + inference): off by default. The interceptor
-      // uses cached natural ends to compute start, falling back to a
-      // neighbor-click "dance" handshake. Kept around behind
-      // drEnableMissingStartWorkaround so the existing missing-start spec
-      // can still verify it, and so we have a fallback if the polarity-fix
-      // path falls short.
-      const workaroundEnabled = !!document.body?.dataset.drEnableMissingStartWorkaround;
-      // Skip the workaround when we don't actually need origStart:
-      //   - captureMode='to' with a valid existing curStart < origEnd: the
-      //     'to' branch just sets newEnd; origStart is only read in the
-      //     tookBoth fallback, which we won't enter.
-      //   (captureMode='from' always needs origStart; 'both' always does.)
+      // drPolarityFixTried bounds retries: if the toggle's refetch also
+      // arrives without `start` (pathological Docs state), give up on
+      // the second attempt rather than looping. The capture block's
+      // second half still runs with origStart=null — the per-mode
+      // branches that need it are guarded, and the rewrite branch below
+      // applies any pre-existing overrides so the page doesn't display
+      // a stale single-version view.
       const curStartStrPeek = document.body?.dataset.drOverrideStart;
       const curStartPeek = curStartStrPeek ? parseInt(curStartStrPeek, 10) : null;
       const toModeDoesntNeedStart =
@@ -252,105 +230,18 @@ function revisionInterceptorFunc(): void {
         curStartPeek !== null && Number.isFinite(curStartPeek) &&
         origEnd !== null && curStartPeek < origEnd;
       if (origStart === null && origEnd !== null && !toModeDoesntNeedStart) {
-        if (workaroundEnabled) {
-          const pendingEl = document.querySelector('.dr-pending-capture');
-          const allItems = Array.from(document.querySelectorAll('[aria-label="Versions"] [role="listitem"]'));
-          const pendingIdx = pendingEl ? allItems.indexOf(pendingEl) : -1;
-
-          if (pendingIdx === -1) {
-            console.log('[DiffRange] missing-start workaround: end=' + origEnd + ', no pending-capture listitem — skipping');
-
-          } else if (pendingIdx === allItems.length - 1) {
-            origStart = 1;
-            console.log('[DiffRange] missing-start workaround: end=' + origEnd + ', target idx=' + pendingIdx + ' is oldest — using start=1');
-
-          } else {
-            // Path B: try to infer from the next-older listitem's cached end.
-            const neighbor = allItems[pendingIdx + 1] as HTMLElement;
-            const cachedEnd = neighbor.dataset.drNaturalEnd;
-            if (cachedEnd) {
-              const ce = parseInt(cachedEnd, 10);
-              if (Number.isFinite(ce)) {
-                origStart = ce + 1;
-                console.log('[DiffRange] missing-start workaround: end=' + origEnd + ', inferred start=' + origStart + ' from cached end of next-older (idx=' + (pendingIdx + 1) + ')');
-              }
-            }
-
-            if (origStart === null) {
-              // Path C — hand off to the content-script dance.
-              //
-              // Stash the capture mode so the re-click preserves From/To intent
-              // (not collapsing to 'both').
-              //
-              // Stash existing overrides so the neighbor click doesn't rewrite
-              // its URL to the stale range (would waste a request and flash the
-              // old diff); the re-click's capture branch sees them as "current"
-              // to combine with the inferred start. The dance handler restores
-              // both before the re-click.
-              console.log('[DiffRange] missing-start workaround: end=' + origEnd + ', no cached neighbor — scheduling dance for target idx=' + pendingIdx + ' (mode=' + captureMode + ')');
-              document.body.dataset.drMissingStartDance = String(pendingIdx);
-              document.body.dataset.drMissingStartDanceMode = captureMode;
-
-              const curS = document.body.dataset.drOverrideStart;
-              const curE = document.body.dataset.drOverrideEnd;
-              if (curS) document.body.dataset.drMissingStartDanceStashStart = curS;
-              if (curE) document.body.dataset.drMissingStartDanceStashEnd = curE;
-              setOverrides(undefined, undefined);
-
-              pendingEl?.classList.remove('dr-pending-capture');
-              delete document.body.dataset.drCaptureMode;
-
-              // Clear drBothOnSelected: the user just clicked a different
-              // version, so the previous both-on-selected state no longer
-              // applies. Otherwise the restore-on-reselect observer could
-              // re-apply From+To to whatever listitem Docs selected during the
-              // initial click (pre-dance), overwriting the re-click's capture
-              // and collapsing divergent ranges to from=to=target.
-              delete document.body.dataset.drBothOnSelected;
-
-              return url;
-            }
-          }
+        if (document.body?.dataset.drPolarityFixTried) {
+          console.warn('[DiffRange] polarity fix: still no start after retry — giving up');
+          delete document.body.dataset.drPolarityFixTried;
+          delete document.body.dataset.drCaptureMode;
+          document.querySelector('.dr-pending-capture')?.classList.remove('dr-pending-capture');
+          // Fall through into the capture block's second half (benign no-op
+          // for origStart=null) and on to the rewrite branch.
         } else {
-          // Polarity-fix path (default). Docs sent a no-start URL but we
-          // need a start to complete the capture. Schedule a single
-          // Highlight-changes toggle in the content script — the toggle
-          // makes Docs refire on the same selected listitem with the
-          // opposite kind of URL. Under both polarities, *one* of the
-          // two checkbox states produces a `start+end` URL, so a single
-          // toggle is enough to surface a usable read.
-          //
-          // Keep drCaptureMode and `.dr-pending-capture` in place so the
-          // follow-up XHR routes through this same capture branch and
-          // the application logic runs there.
-          //
-          // Bound retries with drPolarityFixTried — if the toggle's
-          // refetch *also* arrives without `start` (e.g., simulation is
-          // on, which strips start unconditionally; or some pathological
-          // Docs state), we'd otherwise loop forever. Give up gracefully
-          // on the second attempt: clear capture state and let the
-          // rewrite branch pass the URL through. The displayed result
-          // may be wrong, but the loop doesn't pin the page.
-          if (document.body?.dataset.drPolarityFixTried) {
-            console.warn('[DiffRange] polarity fix: still no start after retry — giving up');
-            delete document.body.dataset.drPolarityFixTried;
-            delete document.body.dataset.drCaptureMode;
-            document.querySelector('.dr-pending-capture')?.classList.remove('dr-pending-capture');
-            // Fall through into the capture block's second half. With
-            // origStart=null the per-mode branches that need it are
-            // skipped (guarded). The block's setOverrides + highlight
-            // updates still run but with the existing override values
-            // (no change) and a now-null .dr-pending-capture, so the
-            // net effect is benign. The rewrite branch below still runs
-            // and applies any pre-existing overrides to the outgoing
-            // URL — which is what we want, so the page doesn't display
-            // a stale-no-rewrite single-version view.
-          } else {
-            console.log('[DiffRange] polarity fix: end=' + origEnd + ', no start — scheduling Highlight-changes toggle (mode=' + captureMode + ')');
-            document.body.dataset.drPolarityFixTried = '1';
-            document.body.dataset.drPendingPolarityFix = '1';
-            return url;
-          }
+          console.log('[DiffRange] polarity fix: end=' + origEnd + ', no start — scheduling Highlight-changes toggle (mode=' + captureMode + ')');
+          document.body.dataset.drPolarityFixTried = '1';
+          document.body.dataset.drPendingPolarityFix = '1';
+          return url;
         }
       }
 
@@ -419,8 +310,8 @@ function revisionInterceptorFunc(): void {
           // itself. Used later if the user clicks From/To on this version when
           // it's already selected — Docs won't fire a new showrevision in that
           // case, so we fall back to this cached range. Skip the start cache
-          // if origStart is null (missing-start URL with no inference) — we
-          // don't want to write "null" as a string.
+          // if origStart is null (e.g., a polarity-fix retry-exhaustion fall
+          // through) — we don't want to write "null" as a string.
           if (origStart !== null) (pending as HTMLElement).dataset.drNaturalStart = String(origStart);
           (pending as HTMLElement).dataset.drNaturalEnd = String(origEnd);
 
@@ -649,28 +540,5 @@ function revisionInterceptorFunc(): void {
     }
   };
 
-  // Debug toggles for issue #2. Callable from DevTools:
-  //   drSimulateMissingStart(true)  — pretend Docs dropped `start` on every
-  //                                   showrevision (strips it from the
-  //                                   outgoing URL too, mirroring the real
-  //                                   bug). Reload the page or call with
-  //                                   false to restore.
-  //   drEnableMissingStartWorkaround(true) — turn the inference / dance fix
-  //                                           back on (off by default in the
-  //                                           extension). Combine with
-  //                                           drSimulateMissingStart(true) to
-  //                                           watch the workaround repair the
-  //                                           simulated bug end-to-end.
-  window.drSimulateMissingStart = function(enabled: boolean): void {
-    if (enabled) document.body.dataset.drSimulateMissingStart = '1';
-    else delete document.body.dataset.drSimulateMissingStart;
-    console.log('[DiffRange] drSimulateMissingStart = ' + !!enabled);
-  };
-  window.drEnableMissingStartWorkaround = function(enabled: boolean): void {
-    if (enabled) document.body.dataset.drEnableMissingStartWorkaround = '1';
-    else delete document.body.dataset.drEnableMissingStartWorkaround;
-    console.log('[DiffRange] drEnableMissingStartWorkaround = ' + !!enabled);
-  };
-
-  console.log('[DiffRange] revision interceptor installed (showRevisions(), openVersionHistory(), drSimulateMissingStart(), drEnableMissingStartWorkaround() available)');
+  console.log('[DiffRange] revision interceptor installed (showRevisions(), openVersionHistory() available)');
 }

@@ -7,8 +7,6 @@ interface Window {
   __drMaxRevision: number | undefined;
   showRevisions: (start: number, end: number) => void;
   openVersionHistory: () => boolean;
-  drSimulateMissingStart: (enabled: boolean) => void;
-  drEnableMissingStartWorkaround: (enabled: boolean) => void;
 }
 
 // Service worker globals used by background.ts.

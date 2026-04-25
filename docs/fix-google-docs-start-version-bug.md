@@ -2,194 +2,75 @@
 
 Tracked upstream in [issue #2](https://github.com/jshute96/GoogleDocsDiffRange/issues/2).
 
-**Status: the polarity-fix path is the default workaround.** When the
-interceptor sees a no-`start` URL with a pending capture, it sets
-`drPendingPolarityFix` and the content script toggles "Highlight changes"
-once. Under either polarity, *one* of the two checkbox states produces a
-`start+end` URL; the toggle's refetch carries the start the capture needs.
-
-**Legacy infer-start workaround** (paths A/B/C + the dance) is still in the
-code, gated on `drEnableMissingStartWorkaround`. It's off by default but
-kept for the missing-start spec's coverage and as a fallback if the
-polarity-fix approach falls short.
+**Status: polarity-fix toggle is the active workaround.** Earlier we shipped an inference/"dance" approach gated behind `drEnableMissingStartWorkaround`; that code has been removed. See "What we removed" below for what we tried and why we replaced it.
 
 ## The bug
 
 Google Docs sometimes fires a `showrevision` request without a `start` parameter (e.g., just `?end=81409`).
 
-- Appears to be a Google Docs bug — reproduces without the extension.
-- Triggered on large docs whose first diff fetch takes too long.
-- Sticky within the polarity it leaves the session in (see "Trigger" / "Recovery" below).
-- Clicking different revisions no longer updates the displayed diff.
-- Without the extension: revision navigation is visibly broken.
-- With the naive extension (no workaround): same — the rewritten URL still has no `start`, and every click shows the same stuck diff.
+- Reproduces without the extension; this is a Docs bug.
+- Triggered when a `start+end` `showrevision` takes longer than ~2s.
+- Sticky within the polarity it leaves the session in.
+- With `start` missing, every revision click shows the same stuck single-version content.
 
 ### Trigger
 
-- Reproduced in `testing/no-extension/docs-version-fallback-bug.spec.ts`. Test injects a 5s delay around `XMLHttpRequest.send` / `window.fetch` for the next `/showrevision` request that carries `start=`, simulating slow network for one diff fetch.
-- Threshold appears to be ~2s; 5s makes the trigger reliable.
+- Reproduced in `testing/no-extension/docs-version-fallback-bug.spec.ts`. The test injects a 5s delay around `XMLHttpRequest.send` / `window.fetch` for the next `showrevision` carrying `start=`, simulating a slow diff fetch for one request.
 - After the slow request, Docs auto-fires a follow-up `showrevision` *without* `start=` and renders a single-revision view — even though "Highlight changes" is still visibly checked.
 
-### Stickiness within a polarity
+### Polarity model
 
-- "Polarity" = the relationship between Highlight-changes checkbox state and the `start=` / no-`start` URL Docs sends:
+- "Polarity" = the relationship between Highlight-changes checkbox state and the kind of `showrevision` URL Docs sends.
   - **Normal polarity**: checkbox checked → `start+end`; unchecked → `end` only.
   - **Inverted polarity** (post-bug): checkbox checked → `end` only; unchecked → `start+end`.
 - Each slow-diff trigger flips the polarity. Toggling the checkbox does *not* flip the polarity — it just moves along the current polarity's mapping.
+- Tab reload resets polarity to normal. A second slow-diff trigger flips polarity back to normal (observed empirically; not asserted in the repro).
 
-### Recovery
+## The fix: polarity-fix toggle
 
-- Tab reload resets polarity to normal.
-- A second slow-diff trigger flips polarity back to normal (not yet asserted in the no-extension repro; observed empirically).
+Single mechanism for the entire bug, including session start in inverted polarity.
 
-## The fix (default): polarity-fix toggle
-
-Single mechanism for the entire bug — including session start in inverted polarity:
-
-- **In the interceptor** (`src/background-injected.ts`): if `origStart` is missing while `drCaptureMode` is set (and `drEnableMissingStartWorkaround` is off), set `drPendingPolarityFix='1'` and bail out of the rewrite without consuming capture.
-- **In the content script** (`src/content-revisions.ts`): a `MutationObserver` on `data-dr-pending-polarity-fix` fires `runPolarityFixIfFlagged`, which clicks the "Highlight changes" checkbox once and arms `drToggleRefetchPending`.
+- **Interceptor** (`src/background-injected.ts`): if `origStart` is missing while `drCaptureMode` is set, set `drPendingPolarityFix='1'` and bail out of the rewrite without consuming capture.
+- **Content script** (`src/content-revisions.ts`): a `MutationObserver` on `data-dr-pending-polarity-fix` fires `runPolarityFixIfFlagged`, which clicks "Highlight changes" once and arms `drToggleRefetchPending`.
 - **Docs auto-refires `showrevision`** ~300ms later. Under both polarities, exactly one checkbox state produces `start+end` URLs, so a single toggle surfaces a usable read.
-- **The follow-up XHR re-enters the capture branch** with `drCaptureMode` and `.dr-pending-capture` still set; capture completes against `origStart, origEnd` and the rewrite branch puts the desired range on the outgoing URL.
+- **Follow-up XHR re-enters the capture branch** with `drCaptureMode` and `.dr-pending-capture` still set; capture completes against `origStart, origEnd`.
 
-Bounded retry: `drPolarityFixTried` is set with the polarity-fix request and cleared on the next successful capture. If the toggle's refetch *also* arrives without `start` (e.g., `drSimulateMissingStart` strips `start` unconditionally), the second pass clears capture state and falls through — the displayed result may be wrong but the page doesn't loop.
+### Bounded retry
+
+- `drPolarityFixTried` is set with the polarity-fix request and cleared on the next successful capture.
+- If the toggle's refetch *also* arrives without `start`, the second pass clears capture state and falls through.
+- The displayed result may be wrong in that pathological case, but the page doesn't loop.
 
 ### Versions mode rewrite
 
 In Versions mode the rewrite branch always strips `start`, regardless of overrides. Polarity inversion can leave Docs producing `start+end` URLs while we're in Versions mode (checkbox unchecked + inverted polarity = diff URLs); the strip keeps the displayed content consistent with the user's selected mode.
 
-### Coverage
+## Coverage
 
 - `testing/no-extension/docs-version-fallback-bug.spec.ts` reproduces the bug + polarity XOR without the extension, using `armOneShotShowRevisionDelay` to make one diff fetch slow.
 - `testing/extension/version-range-slow-diff.spec.ts` triggers the same bug under the extension and asserts that subsequent click-driven captures recover via the polarity-fix path, plus that Versions mode keeps stripping `start` across the polarity flip.
 
-## The legacy fix: infer the missing `start`
+## What we removed
 
-Each version in the list corresponds to a revision range `[start_N, end_N]`. The ranges are chronologically adjacent and non-overlapping, so `start_N = end_{N+1} + 1`. Docs still sends `end` reliably even when it drops `start`. That's all we need.
+Earlier the extension carried an inference/"dance" workaround (paths A/B/C) that tried to compute the missing `start` locally instead of asking Docs for it. The code path was retired in favor of the polarity-fix toggle. Concept summary:
 
-### Assumptions
+- Each version corresponds to a chronologically adjacent range `[start_N, end_N]`, so `start_N = end_{N+1} + 1`. Docs still sends `end` reliably.
+- **Path A**: target is the oldest listitem → `start = 1`.
+- **Path B**: next-older listitem already has a cached `end` → `start = cachedEnd + 1`.
+- **Path C** ("the dance"): no cached neighbor — interceptor stashes state, programmatically clicks the next-older listitem (with `drSuppressCapture` so it just populates the cache), then re-clicks the target. The re-click's interceptor pass takes path B with the now-cached neighbor end.
 
-1. **Adjacency**: in the current view, `start_N = end_{N+1} + 1` where `N+1` is the next-older listitem. Holds in both flat and expanded views (expansion replaces a parent range with N non-overlapping child ranges, still chronologically contiguous).
-2. **Rev 1 is always the first revision**: used as `start` when the target is the oldest listitem.
-3. **Docs still sends `end`** even when `start` is dropped (confirmed in the issue).
-4. **SelectedTile is current at XHR time**: the listitem the showrevision is for already has the `SelectedTile` class when `XHR.open` fires. This lets us cache `end` onto the right listitem unambiguously.
-5. **`.click()` fires click synchronously, not mousedown**: drives the dance's control flow (the versions-list mousedown listener can't re-arm capture during our programmatic clicks).
+Why we removed it:
 
-If any of these break, the fix breaks — flag that first before chasing symptoms.
+- Three paths + a stash protocol + an extra `MutationObserver` handshake — substantially more state than the polarity-fix toggle.
+- Path C dispatched two extra showrevisions per missed click and could flash the neighbor's diff briefly.
+- Required maintaining a per-listitem `drNaturalEnd` cache invariant across dropdown switches, expand/collapse re-renders, and dance neighbor clicks. (We still cache `drNaturalStart` / `drNaturalEnd` on listitems for `captureForSelected` — that's a different need and survives.)
+- Required a simulation flag (`drSimulateMissingStart`) for testing because the path was off by default; the polarity-fix path is on always and is testable directly via the real-bug reproduction.
 
-### Three paths
+The dance code is preserved in git history at the commit before its removal.
 
-The interceptor picks one when it sees a captured URL with `origStart=null, origEnd=E`:
+## What we learned
 
-**Path A — target is the oldest listitem (`N == items.length - 1`)**
-
-- Use `start = 1`.
-- Proceed with the normal capture branch as if `origStart=1` came from the URL — set overrides, update highlights, cache `drNaturalStart/End` on `N`.
-- Rewrite the outgoing URL to `start=1&end=E`.
-
-**Path B — next-older listitem (`N+1`) already has a cached `end`**
-
-- Read `items[N+1].dataset.drNaturalEnd = E_prev` (populated by any prior showrevision that touched `N+1`).
-- Use `start = E_prev + 1`.
-- Proceed as path A (set overrides, rewrite URL).
-
-**Path C — no cached neighbor → "the dance"**
-
-Interceptor bails:
-
-1. Stash `drCaptureMode` into `drMissingStartDanceMode` (so the re-click preserves From/To intent).
-2. Stash `drOverrideStart/End` into `drMissingStartDanceStashStart/End` and clear the live overrides.
-3. Clear `drCaptureMode`, `.dr-pending-capture`, `drBothOnSelected`.
-4. Set `drMissingStartDance = N` and return the URL unchanged (no rewrite).
-
-The initial request still goes out (with no `start`) and may briefly render a wrong diff when its response arrives; the dance's re-click response overwrites it shortly after. Network latency means the flash is possible, not guaranteed.
-
-Content script's `MutationObserver` on `body[data-dr-missing-start-dance]` fires (microtask, end of current task):
-
-1. Read `idx=N` and `stashedMode` from dataset, clear the flags.
-2. Click `items[N+1]` with `drSuppressCapture='1'`. The click fires a `showrevision?end=E_prev`. Interceptor:
-   - Top-of-function caches `E_prev` onto `items[N+1].dataset.drNaturalEnd` (SelectedTile is now `N+1`).
-   - Capture branch skipped (no `drCaptureMode`).
-   - Rewrite branch: no overrides (cleared on bail), so URL goes out unchanged.
-3. Restore stashed overrides back onto `drOverrideStart/End`.
-4. Arm `drCaptureMode = stashedMode`, mark target `N` as `.dr-pending-capture`, call `items[N].click()`.
-5. Docs fires `showrevision?end=E` for the target. Interceptor's capture branch runs with cached `items[N+1].drNaturalEnd` present → **path B fires**, infers `start = E_prev + 1`, sets overrides, rewrites URL.
-
-End state: user sees the correct diff for the target. `drNaturalEnd` is now cached on both `N` and `N+1` — future clicks to `N` take path B directly.
-
-### User-visible behavior
-
-- Path A / B: a normal click → correct diff. Single showrevision.
-- Path C: one user click → three showrevisions (broken, neighbor, target re-click). UI briefly shows the neighbor-selected state, then snaps to the target.
-
-### Gate: `to` mode doesn't always need `start`
-
-When `captureMode='to'` and the existing `curStart < origEnd`, the capture branch just sets `newEnd = origEnd` and never reads `origStart` (no tookBoth fallback). The workaround is skipped entirely in that case — no inference, no dance, no logs.
-
-### Natural-end cache: lifecycle and invalidation
-
-- **Storage**: `dataset.drNaturalStart` / `drNaturalEnd` on each `[role="listitem"]` DOM node.
-- **Write sites**:
-  - Top of `rewriteRevisionUrl` writes `end` onto the currently-`SelectedTile` listitem on *every* showrevision, including dance neighbor clicks run with `drSuppressCapture`.
-  - The successful capture branch writes both onto the `.dr-pending-capture` listitem.
-- **Dropdown switch**: Docs replaces the listitem set; old DOM + cached values are discarded. New listitems start empty. The next init-capture fills item[0]; other items fill as they're visited.
-- **Expand / collapse arrow**: Docs re-renders almost every listitem (only `item[0]` keeps DOM identity). Cached values on discarded nodes go with them — no stale-cache risk, but the workaround needs the dance on first visit to a re-rendered item.
-- **Invariant under expansion**: adjacency — `start_N = end_{N+1} + 1` — holds whether the list is flat or expanded. Expansion replaces a parent range with N child ranges, still non-overlapping and chronologically adjacent.
-- **No mid-dance re-render**: the dance runs synchronously inside one MutationObserver microtask; Docs has no yield point to re-render between the two clicks.
-- **Tab reload**: cache gone with the page.
-
-### Design notes — why this shape
-
-- **Pending-capture cleanup** runs unconditionally at the end of the capture branch (not only on success). The dance path's fall-through would otherwise leave the class on a listitem forever and confuse `waitForCaptureSettled`.
-- **Dance runs synchronously** inside the MutationObserver callback (neighbor click then target re-click, no `setTimeout` between). A fresh task between the two leaves a window where `drMissingStartDance`, `drCaptureMode`, and `.dr-pending-capture` are all absent — a waiter polling during that window would see "settled" mid-dance. `waitForCaptureSettled` checks `drMissingStartDance` too.
-- **`.click()` skips mousedown**, so the dance manually arms `drCaptureMode` + pending before the target re-click (the versions-list delegation would have done it for a real mouse event).
-- **No cascade**: the neighbor click bypasses the capture branch (no `drCaptureMode` armed). The target re-click does go through the capture branch, but the top-of-function end-cache ran during the neighbor click's interceptor pass — so it takes path B rather than scheduling a second dance.
-- **Capture mode stashed across the bail-out** → `drMissingStartDanceMode`. The re-click preserves 'from' / 'to' / 'both' intent instead of collapsing to `from=to=target`.
-- **Overrides stashed across the bail-out** → `drMissingStartDanceStashStart/End`. Prevents the neighbor click from rewriting its URL with the stale range (which would waste a request and flash the old diff). The re-click's capture branch sees the pre-dance overrides as "current" for `from`/`to` combine logic.
-
-## Automated testing
-
-Tests live in `testing/extension/version-range-missing-start.spec.ts`. Helpers in `testing/extension/helpers.ts`:
-
-- `setSimulateMissingStart(page, true/false)` — toggles `body.dataset.drSimulateMissingStart`. When set, the interceptor strips `start` from every URL (outgoing + its own reading), mirroring the real Docs bug.
-- `setEnableMissingStartWorkaround(page, true/false)` — toggles `body.dataset.drEnableMissingStartWorkaround`. Workaround is off by default in the extension; tests that exercise the inference/dance must opt in.
-- `clearPerListitemCache(page)` — wipes `drNaturalStart` / `drNaturalEnd` from every listitem. Without this, the content-chain sweep's prior clicks leave every item's end cached, so the workaround always takes path B. Clearing forces path C.
-
-`waitForCaptureSettled` also waits for `drMissingStartDance` to be absent — the MutationObserver runs the dance synchronously in one microtask, but between `XHR.open` returning and the observer firing, `drCaptureMode` / pending are briefly clear. Polling without this check would return "settled" mid-dance.
-
-`beforeEach` clears the simulation flags before `resetRange`, so init-capture runs under normal conditions every test.
-
-### Test coverage
-
-| Test | What it verifies |
-|------|------------------|
-| simulation OFF, workaround ON (default) — content-chain sweep | Normal case: every mid-range click produces the correct diff contents |
-| simulation ON, workaround OFF — "broken baseline" | Click a mid-range version; contents don't match the expected range (proves the bug is observable) |
-| simulation ON, workaround ON, cached neighbor | Path B: mid-range click succeeds without a dance |
-| simulation ON, workaround ON, cleared cache | Path C: dance fires; verify `scheduling dance` + `re-clicking target` log lines appear |
-| simulation ON, workaround ON, click oldest | Path A: `start=1` is used; `before` content is empty |
-| simulation ON, workaround ON, "Start here" on missing-start version | Captured mode stashed correctly — existing `To` endpoint preserved, not collapsed to `from=to=target` |
-| simulation ON, workaround ON, several mid-range clicks | Chain invariant holds across multiple clicks under simulation |
-
-## Interactive testing
-
-The simulation flags are exposed as console functions (set in `background-injected.ts`). From DevTools on any Google Docs page with the extension loaded:
-
-```javascript
-drSimulateMissingStart(true)           // pretend Docs dropped `start`
-drEnableMissingStartWorkaround(true)   // turn the fix on (off by default)
-```
-
-Pass `false` to restore. With only simulation on, clicking versions produces wrong diffs (the broken baseline — the extension's default state plus the simulated bug). Turn `drEnableMissingStartWorkaround(true)` and click again — content becomes correct, and you'll see the workaround log lines:
-
-```
-[DiffRange] orig request (simulated missing start): ? to 10 (mode=both)
-[DiffRange] missing-start workaround: end=10, no cached neighbor — scheduling dance for target idx=3 (mode=both)
-[DiffRange] missing-start dance: clicking neighbor idx=4 to learn its end
-[DiffRange] orig request (simulated missing start): ? to 8
-[DiffRange] missing-start dance: re-clicking target idx=3 (mode=both)
-[DiffRange] orig request (simulated missing start): ? to 10 (mode=both)
-[DiffRange] missing-start workaround: end=10, inferred start=9 from cached end of next-older (idx=4)
-[DiffRange] rewrote to: 9 to 10
-```
-
-After a build (`npm run build`), reload the extension from `chrome://extensions` and reload the doc before the new toggles become available.
+- **The bug is a polarity flip, not a permanent break.** The earlier mental model was "Docs forgets how to send `start`; we have to compute it ourselves." The actual model is simpler: there's a single internal flag that XORs with the checkbox state, and toggling the checkbox always lets us reach a state where Docs sends `start`.
+- **The `Highlight changes` checkbox is the steering wheel.** We treat our `Diffs|Versions` toggle as the user-facing control and manipulate Highlight changes ourselves to get the kind of read we need. Under inverted polarity the user sees the checkbox bounce around — acceptable.
+- **The reproduction matters more than the workaround.** Once we could trigger the bug deterministically (delay injection on the next `start+` showrevision), the polarity model fell out of the data, and the workaround design followed from the model. The previous workaround was reverse-engineered from symptoms without a reliable trigger; that's why it was more elaborate than necessary.
+- **Cache one thing well, not many things.** `drNaturalStart`/`drNaturalEnd` on listitems is still useful for `captureForSelected` (clicking the already-selected version), but the elaborate cache-lifetime/invalidation rules the dance demanded are gone.

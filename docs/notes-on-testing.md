@@ -98,8 +98,9 @@ npm run test:no-extension    # no-extension only
     URL rewrite.
   - `version-range-navigation.spec.ts` — dropdown switches, VH
     exit/reenter, Diff full history.
-  - `version-range-missing-start.spec.ts` — missing-start showrevision
-    workaround (issue #2).
+  - `version-range-slow-diff.spec.ts` — Docs slow-diff polarity-flip
+    bug (issue #2): triggers via injected delay, asserts polarity-fix
+    recovery.
 - `testing/extension/version-range-shared.ts` — scaffolding shared by
   those specs: per-file `VersionRecorder`, the `beforeEach` registrar,
   and a `registerContentChainSweep` helper that registers the sweep as
@@ -197,30 +198,22 @@ npm run test:no-extension    # no-extension only
   back skip the `before` assertion unless the target is the oldest
   item (where `before === ''` is still well-defined).
 
-### Missing-start workaround tests (issue #2)
+### Slow-diff bug tests (issue #2)
 
-Automated-test helpers (`setSimulateMissingStart`,
-`setEnableMissingStartWorkaround`, `clearPerListitemCache`), the
-`waitForCaptureSettled` dance-aware check, and test coverage are all
-documented in
+The bug + the polarity-fix workaround are documented in
 [`fix-google-docs-start-version-bug.md`](fix-google-docs-start-version-bug.md).
+Reproduction is via `armOneShotShowRevisionDelay` (in
+`testing/network-injection.ts`), which delays the next outgoing
+`showrevision` carrying `start=` long enough to trigger Docs' fallback.
+The no-extension spec proves the bug + polarity XOR; the extension spec
+proves recovery.
 
-#### Manual / interactive testing flags
-
-Two DevTools-callable toggles let you reproduce the missing-start Docs
-bug against any real doc without editing a huge one:
-
-- `drSimulateMissingStart(true)` — strips `start` from every showrevision
-  URL (outgoing + the interceptor's reading), mirroring the real bug.
-- `drEnableMissingStartWorkaround(true)` — turns the fix on. Off by
-  default in the extension.
-
-Turn simulation on alone to see the broken baseline; add
-`drEnableMissingStartWorkaround(true)` to watch the workaround repair it live.
-Expected log sequence for the dance path is in
-[`fix-google-docs-start-version-bug.md`](fix-google-docs-start-version-bug.md).
-Reload the extension + the doc after `npm run build` so the toggles
-surface on `window`.
+There are no DevTools-callable toggles for this bug — the simulation
+flag (`drSimulateMissingStart`) and the legacy workaround toggle
+(`drEnableMissingStartWorkaround`) were removed when the
+inference/dance code was retired. Use the delay-injection helper from a
+test, or reload the page to clear inverted polarity left by an earlier
+manual reproduction.
 
 ### Test fixtures
 

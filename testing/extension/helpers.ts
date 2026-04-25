@@ -78,27 +78,20 @@ async function waitForCaptureSettled(page: Page, timeoutMs = 3000): Promise<void
     () =>
       !document.body.dataset.drCaptureMode &&
       !document.querySelector('.dr-pending-capture') &&
-      // Also wait for the missing-start workaround (issue #2) to complete:
-      // the interceptor sets this flag when it can't infer `start` and needs
-      // the content script to run the neighbor-reclick dance. Between the
-      // flag being set and the MutationObserver task firing, the other two
-      // conditions are briefly both true — so without this guard a poll
-      // could return "settled" mid-dance.
-      !document.body.dataset.drMissingStartDance &&
-      // And wait for the Highlight-changes toggle refetch to land. Docs'
+      // Wait for the Highlight-changes toggle refetch to land. Docs'
       // checkbox change handler fires its showrevision XHR ~300ms after
       // the click (async), so without this gate tests would read the
       // rewrite log before it's been written. Set by content-revisions
       // before toggling, cleared by the interceptor when the first rewrite
       // completes.
       !document.body.dataset.drToggleRefetchPending &&
-      // The polarity-fix handshake (issue #2 default workaround): the
-      // interceptor sets this flag when it sees a no-start URL with a
-      // pending capture; the content-script observer toggles Highlight
-      // changes (which sets drToggleRefetchPending) and clears this flag.
-      // Between the flag being set and the observer task firing, the other
-      // gates are all briefly clear — without this guard a poll could
-      // return "settled" mid-handshake.
+      // The polarity-fix handshake (issue #2): the interceptor sets this
+      // flag when it sees a no-start URL with a pending capture; the
+      // content-script observer toggles Highlight changes (which sets
+      // drToggleRefetchPending) and clears this flag. Between the flag
+      // being set and the observer task firing, the other gates are all
+      // briefly clear — without this guard a poll could return "settled"
+      // mid-handshake.
       !document.body.dataset.drPendingPolarityFix,
     null,
     { timeout: timeoutMs }
@@ -562,49 +555,6 @@ export async function extractVersionContents(
     `extractVersionContents: no start-less showrevision response matching end=${expectedEnd} ` +
     `(saw ${entries.length} responses: ${entries.map((e) => `${e.start ?? '?'}..${e.end}`).join(', ')})`
   );
-}
-
-/**
- * Clear the per-listitem `drNaturalStart` / `drNaturalEnd` cache. Used by
- * missing-start dance tests to force the slow path (interceptor can't find a
- * cached neighbor end and must hand off to the content-script dance) instead
- * of the fast path (neighbor's end is already cached from an earlier click).
- */
-export async function clearPerListitemCache(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const items = document.querySelectorAll('[aria-label="Versions"] [role="listitem"]');
-    items.forEach((it) => {
-      const el = it as HTMLElement;
-      delete el.dataset.drNaturalStart;
-      delete el.dataset.drNaturalEnd;
-    });
-  });
-}
-
-/**
- * Toggle the interceptor's "simulate missing start" mode for the missing-start
- * workaround tests (issue #2). When enabled, every showrevision URL has its
- * `start` param stripped both before our processing AND on the outgoing
- * request — mirroring the real Docs bug where `start` is omitted on large docs.
- */
-export async function setSimulateMissingStart(page: Page, enabled: boolean): Promise<void> {
-  await page.evaluate((v) => {
-    if (v) document.body.dataset.drSimulateMissingStart = '1';
-    else delete document.body.dataset.drSimulateMissingStart;
-  }, enabled);
-}
-
-/**
- * Toggle the workaround itself. The extension ships with it off (we're trying
- * a different workaround for the underlying Docs bug), so tests that want to
- * exercise the inference / dance code paths must turn it on explicitly. Tests
- * that verify the "broken" baseline simply leave it off.
- */
-export async function setEnableMissingStartWorkaround(page: Page, enabled: boolean): Promise<void> {
-  await page.evaluate((v) => {
-    if (v) document.body.dataset.drEnableMissingStartWorkaround = '1';
-    else delete document.body.dataset.drEnableMissingStartWorkaround;
-  }, enabled);
 }
 
 /**

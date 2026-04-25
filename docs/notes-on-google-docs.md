@@ -113,8 +113,7 @@ const input = label && document.getElementById(label.htmlFor);
 ```
 
 The older approach was to click a *different* listitem and then click
-back ("click-away-then-back"); that's now retained only inside the
-missing-start dance, which has its own constraints.
+back ("click-away-then-back"); the toggle-twice trick replaces it.
 
 ### Diffs vs Versions mode
 

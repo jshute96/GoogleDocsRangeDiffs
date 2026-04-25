@@ -54,7 +54,6 @@ One-line descriptions of every source file, grouped by directory.
 | `testing/extension/version-range-basic.spec.ts` | Behavioral tests: initial entry, content-chain sweep, basic selection, oldest-version edges |
 | `testing/extension/version-range-from-to.spec.ts` | Behavioral tests: From/To bounds, range collapse on listitem click, URL rewrite |
 | `testing/extension/version-range-navigation.spec.ts` | Behavioral tests: dropdown switches, VH exit/reenter, Diff full history |
-| `testing/extension/version-range-missing-start.spec.ts` | Behavioral tests: missing-start showrevision workaround (issue #2) |
 | `testing/extension/version-range-expand-arrow.spec.ts` | Behavioral tests: expand/collapse arrow — range pinning, round-trip, divergent collapse |
 | `testing/extension/version-range-versions-mode.spec.ts` | Behavioral tests: Diffs|Versions toggle, per-row button visibility, single-version content |
 | `testing/extension/version-range-slow-diff.spec.ts` | Behavioral tests: extension survives Docs slow-diff polarity-flip via the polarity-fix path |
