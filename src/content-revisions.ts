@@ -74,7 +74,7 @@
         // our button column. Force flex-start so the textarea hugs the
         // left edge of the Container instead.
         '.appsDocsRevisionsWizSidebarRevisionTitleTextboxContainer { align-items:flex-start !important; }' +
-        '.dr-full-history-row { padding:8px 16px; font-family:Google Sans,Roboto,sans-serif; display:flex; align-items:center; gap:8px; }' +
+        '.dr-full-history-row { padding:8px 16px; font-family:Google Sans,Roboto,sans-serif; display:flex; align-items:center; gap:24px; }' +
         '.dr-full-history-btn { padding:4px 10px; font-size:12px; }' +
         // Diffs|Versions segmented mode toggle. Two buttons share a single
         // outline so they read as one control; the selected one fills solid
@@ -516,12 +516,13 @@
   }
 
   // Inject the top-row controls (Diff full history + Diffs|Versions mode
-  // toggle) at the top of the scrollable versions area, above the
-  // "This month" / date section heading. Idempotent — early-returns if
-  // the row already exists.
+  // toggle) into the non-scrollable header (the same container that holds
+  // Docs' version-type dropdown), so they stay visible when the user
+  // scrolls the version list. Idempotent — early-returns if the row
+  // already exists.
   function injectFullHistoryButton(): void {
-    const scrollable = document.querySelector('.DocsSidebarComponentsScrollableContentContainer');
-    if (!scrollable || scrollable.querySelector('.dr-full-history-row')) return;
+    const header = document.querySelector('.DocsSidebarComponentsHeaderContentContainer');
+    if (!header || header.querySelector('.dr-full-history-row')) return;
 
     const row = document.createElement('div');
     row.className = 'dr-full-history-row';
@@ -555,7 +556,7 @@
     modeWrap.appendChild(versionsBtn);
     row.appendChild(modeWrap);
 
-    scrollable.insertBefore(row, scrollable.firstChild);
+    header.appendChild(row);
 
     updateModeButtons();
   }

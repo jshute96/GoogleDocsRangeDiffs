@@ -518,9 +518,10 @@ The doc's total revision count is the `end` of the newest version's
 
 ### Diff full history button
 
-The button lives at the top of `.DocsSidebarComponentsScrollableContentContainer`
-(above the section heading like "This month") and triggers a one-click
-diff of the entire history:
+The button lives in `.DocsSidebarComponentsHeaderContentContainer` (the
+non-scrollable header alongside Docs' version-type dropdown, so it stays
+visible when the version list scrolls) and triggers a one-click diff of
+the entire history:
 
 - Writes `body.dataset.drOverrideStart = '1'` and `.drOverrideEnd = maxRev`
   synchronously (not via `postMessage` — see "Override storage" above).
