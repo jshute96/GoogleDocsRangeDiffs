@@ -539,6 +539,22 @@ the entire history:
   since `.click()` doesn't fire mousedown) and clears any armed
   `drInitCapture` so it can't repopulate the overrides we just set.
 
+**Sticky-from-one (long histories that load lazily):**
+
+- Long version lists don't preload — Docs reveals more rows as the user
+  scrolls. The From-highlight set at click time on `items[n-1]` would
+  otherwise stay pinned to that row and fail to extend onto newly-revealed
+  older versions.
+- `body.dataset.drStickyFromOne = '1'` enters a state where override
+  `start` stays at `1` and the From-highlight re-pins to whichever row
+  is currently last (`items[items.length-1]`) on every observer tick
+  (`applyStickyFromOneIfFlagged` in `injectVersionButtons`).
+- "End here" preserves the state — the range becomes `1..clickedEnd`,
+  From-highlight keeps following the oldest visible row.
+- "Start here", "Diff here", any direct version selection (mousedown on
+  body / label / expand arrow), mode toggles, dropdown switches, and VH
+  re-entry all clear the flag.
+
 ### Deferred highlight for newly-appeared listitems
 
 - Init capture may fire before `injectVersionButtons` wires up the From/To

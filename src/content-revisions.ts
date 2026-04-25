@@ -138,6 +138,11 @@
         b.addEventListener('mouseup', suppress);
         b.addEventListener('click', async (e: Event) => {
           e.stopPropagation();
+          // Any user-driven Start/Diff click defines a fresh start bound, so
+          // exit the sticky-from-one state set by Diff full history. End-here
+          // ('to') preserves it — clicking "End here" while sticky just
+          // rebounds the existing 1..end range.
+          if (mode !== 'to') delete document.body.dataset.drStickyFromOne;
           // In Versions mode the selected revision's `start` isn't known
           // (Versions URLs only carry `end`). Switching via enterDiffsMode
           // toggles Highlight changes ON with capture armed on SelectedTile,
@@ -191,12 +196,37 @@
     setupVersionListListener();
     setupVersionTypeDropdownListener();
     restoreBothOnSelectedIfFlagged();
+    // Sticky-from-one (Diff full history): pin the From-highlight to whatever
+    // is currently the oldest visible listitem. Must run before
+    // refreshButtonVisibility so updateInBetweenHighlights sees the moved
+    // From and recomputes the in-between band onto any newly-loaded items.
+    applyStickyFromOneIfFlagged();
     // Re-apply per-row button visibility on every observer tick — Versions
     // mode pivots on SelectedTile (which moves on listitem clicks since the
     // mousedown delegation doesn't intercept those in Versions mode), and
     // Diffs mode's in-between highlights need to extend onto any newly-added
     // listitems (e.g., expand-arrow adds detailed sub-versions).
     refreshButtonVisibility();
+  }
+
+  // Sticky-from-one state, set by "Diff full history". Override.start stays
+  // at 1, and the From-highlight visually pins to whichever listitem is
+  // currently the oldest — including new ones that scroll into view. This
+  // function moves the From-highlight onto the current oldest listitem,
+  // clearing any From-highlight on stale items. Idempotent: bails out cheaply
+  // when the highlight is already on the right item.
+  function applyStickyFromOneIfFlagged(): void {
+    if (!document.body.dataset.drStickyFromOne) return;
+    const items = document.querySelectorAll('[aria-label="Versions"] [role="listitem"]');
+    if (items.length === 0) return;
+    const oldest = items[items.length - 1];
+    const oldestFromBtn = oldest.querySelector('.dr-version-from-btn');
+    if (!oldestFromBtn) return;
+    const lit = document.querySelectorAll('.dr-version-from-btn.dr-btn-highlighted');
+    const alreadyOk = lit.length === 1 && lit[0] === oldestFromBtn;
+    if (alreadyOk) return;
+    for (let i = 0; i < lit.length; i++) lit[i].classList.remove('dr-btn-highlighted');
+    oldestFromBtn.classList.add('dr-btn-highlighted');
   }
 
   // If body.dataset.drBothOnSelected is set (the last capture landed From and
@@ -614,6 +644,7 @@
     // (and for any subsequent listitem clicks while in this mode).
     setDatasetOverrides(null, null);
     delete document.body.dataset.drBothOnSelected;
+    delete document.body.dataset.drStickyFromOne;
     // Clear lit + in-between styling. .dr-btn-hidden / .dr-btn-shown are
     // re-applied immediately by applyVersionsModeButtons.
     const lit = document.querySelectorAll('.dr-btn-highlighted, .dr-btn-in-between');
@@ -640,6 +671,8 @@
   async function enterDiffsMode(): Promise<void> {
     document.body.dataset.drMode = 'diffs';
     updateModeButtons();
+    // Entering Diffs arms a fresh both-on-selected range, not sticky-from-one.
+    delete document.body.dataset.drStickyFromOne;
     const checkbox = findHighlightChangesCheckbox();
     if (!checkbox || checkbox.checked) return;
     const items = document.querySelectorAll('[aria-label="Versions"] [role="listitem"]');
@@ -722,6 +755,15 @@
     // doesn't reapply From/To onto the selected tile and clobber the range.
     delete document.body.dataset.drBothOnSelected;
 
+    // Enter sticky-from-one: override.start stays at 1, and the From-highlight
+    // re-pins to the current oldest visible listitem on every observer tick
+    // (applyStickyFromOneIfFlagged). When the user scrolls and Docs loads
+    // older versions, the From-highlight follows them down so the in-between
+    // band extends across the newly-revealed rows. An "End here" click
+    // preserves this state (the range becomes 1..clickedEnd); "Start here"
+    // or any direct version selection drops it (handled at those entry points).
+    document.body.dataset.drStickyFromOne = '1';
+
     // Cancel any armed init-capture — otherwise the interceptor's init-capture
     // branch would re-capture the click target's natural range and overwrite
     // our overrides.
@@ -772,6 +814,7 @@
     }
     setDatasetOverrides(null, null);
     delete document.body.dataset.drBothOnSelected;
+    delete document.body.dataset.drStickyFromOne;
     // Dropdown switches reload the versions list; treat as a fresh start
     // and snap back to Diffs mode (the default).
     document.body.dataset.drMode = 'diffs';
@@ -886,6 +929,10 @@
           arrowBurstTimer = null;
         }, 400);
       }
+      // Direct click on a listitem (body, label, or expand arrow) defines a
+      // fresh range from that revision — exit sticky-from-one. Done before
+      // captureForSelected / pending-capture so both paths agree.
+      delete document.body.dataset.drStickyFromOne;
       // If the user pressed on the already-selected version via the revision
       // body/label, Docs won't fire a new showrevision — `captureForSelected`
       // applies the range from the cached natural values and forces a
@@ -997,6 +1044,7 @@
           // Must be synchronous — Docs may fire the auto-showrevision
           // within this same mutation batch.
           setDatasetOverrides(null, null);
+          delete document.body.dataset.drStickyFromOne;
           // Re-entering VH is a fresh start — reset to Diffs mode (the
           // default). updateModeButtons runs in injectVersionButtons after
           // the row is built; we just set the dataset here.
