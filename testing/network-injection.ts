@@ -76,7 +76,7 @@ export async function armOneShotShowRevisionDelay(
         const consumed = consumeIfArmed();
         if (consumed) {
           this.__drDelayThis = true;
-          console.log('[DocsBugRepro] arming XHR delay (' + consumed.delayMs + 'ms) for ' + urlStr.slice(0, 120));
+          console.log('[NetInject] arming XHR delay (' + consumed.delayMs + 'ms) for ' + urlStr.slice(0, 120));
         }
       }
       origOpen.call(this, method, url, async_, username, password);
@@ -105,7 +105,7 @@ export async function armOneShotShowRevisionDelay(
       if (urlStr && isTargetUrl(urlStr)) {
         const consumed = consumeIfArmed();
         if (consumed) {
-          console.log('[DocsBugRepro] arming fetch delay (' + consumed.delayMs + 'ms) for ' + urlStr.slice(0, 120));
+          console.log('[NetInject] arming fetch delay (' + consumed.delayMs + 'ms) for ' + urlStr.slice(0, 120));
           return new Promise<Response>((resolve, reject) => {
             setTimeout(() => {
               origFetch.call(window, input as RequestInfo, init).then(resolve, reject);

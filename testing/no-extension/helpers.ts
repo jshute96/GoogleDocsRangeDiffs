@@ -139,20 +139,3 @@ export async function waitForShowRevisionMatching(
   );
 }
 
-/** Wait until `n` more responses have accumulated in `buf` since the call. */
-export async function waitForResponseCount(
-  buf: ShowRevisionBuf,
-  n: number,
-  timeoutMs = 8000
-): Promise<void> {
-  const startCount = buf.all().length;
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (buf.all().length - startCount >= n) return;
-    await new Promise((r) => setTimeout(r, 50));
-  }
-  throw new Error(
-    'waitForResponseCount: only saw ' + (buf.all().length - startCount) + ' new responses ' +
-    'in ' + timeoutMs + 'ms (wanted ' + n + ')'
-  );
-}

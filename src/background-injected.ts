@@ -336,8 +336,15 @@ function revisionInterceptorFunc(): void {
             delete document.body.dataset.drPolarityFixTried;
             delete document.body.dataset.drCaptureMode;
             document.querySelector('.dr-pending-capture')?.classList.remove('dr-pending-capture');
-            // Fall through past the capture block — the rewrite branch
-            // will run with whatever overrides exist.
+            // Fall through into the capture block's second half. With
+            // origStart=null the per-mode branches that need it are
+            // skipped (guarded). The block's setOverrides + highlight
+            // updates still run but with the existing override values
+            // (no change) and a now-null .dr-pending-capture, so the
+            // net effect is benign. The rewrite branch below still runs
+            // and applies any pre-existing overrides to the outgoing
+            // URL — which is what we want, so the page doesn't display
+            // a stale-no-rewrite single-version view.
           } else {
             console.log('[DiffRange] polarity fix: end=' + origEnd + ', no start — scheduling Highlight-changes toggle (mode=' + captureMode + ')');
             document.body.dataset.drPolarityFixTried = '1';

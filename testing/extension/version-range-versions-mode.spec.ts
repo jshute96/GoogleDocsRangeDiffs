@@ -186,13 +186,15 @@ test('versions mode: Start here on older revision builds range from target.start
   await expectRangeAndContents(page, diffResponses, recorder, 3, 0);
 });
 
-test('versions mode invariant: no showrevision URL should have start=', async ({ page, diffResponses, logs }) => {
-  // Switch to Versions, walk a few items, and verify that no `[DiffRange]
-  // Versions mode invariant` warning fired and no recorded showrevision had
-  // a start parameter while we were in Versions mode.
+test('versions mode invariant: no showrevision URL should have start=', async ({ page, diffResponses }) => {
+  // Switch to Versions, walk a few items, and verify that no recorded
+  // showrevision had a start parameter while we were in Versions mode.
+  // The rewrite branch strips `start` unconditionally in Versions mode
+  // even under polarity inversion, so this assertion holds across both
+  // polarities — incoming `start=` URLs are downgraded to info logs and
+  // the outgoing URL Docs sees has no `start`.
   await clickModeToggle(page, 'versions');
   diffResponses.clear();
-  logs.clear();
 
   for (const i of [1, 2, 3]) {
     await clickListitem(page, i);
@@ -202,8 +204,6 @@ test('versions mode invariant: no showrevision URL should have start=', async ({
 
   const offending = diffResponses.all().filter((e) => e.start !== undefined);
   expect(offending, 'no showrevision URLs should have start= while in Versions mode').toEqual([]);
-  const warnings = logs.all().filter((l) => l.includes('Versions mode invariant'));
-  expect(warnings, 'no Versions-mode invariant warnings should fire').toEqual([]);
 });
 
 test('Diff full history from versions mode: switches to diffs and spans full range', async ({ page, diffResponses, logs }) => {

@@ -21,6 +21,7 @@
 import { test, expect } from './fixtures';
 import {
   clickListitem,
+  clickModeToggle,
   extractDiffContents,
 } from './helpers';
 import {
@@ -76,8 +77,9 @@ test('Versions mode survives the bug: rewrite always strips start', async ({ pag
   // changes off and clears overrides; the rewrite branch then strips
   // any `start` from outgoing URLs regardless of overrides, so polarity
   // inversion can't accidentally surface diff content in Versions mode.
-  await page.locator('.dr-mode-versions').click();
-  await page.waitForFunction(() => document.body.dataset.drMode === 'versions');
+  // clickModeToggle awaits the mode-switch's own refetch so the armed
+  // delay below isn't consumed by the toggle's showrevision.
+  await clickModeToggle(page, 'versions');
   // Clear so the assertion below only sees responses captured during
   // the versions-mode walk — the sweep's start+end responses are
   // expected and would otherwise trip the filter.

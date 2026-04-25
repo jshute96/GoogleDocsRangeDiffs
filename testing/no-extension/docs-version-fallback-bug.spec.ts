@@ -36,7 +36,6 @@ import {
   clickListitem,
   getHighlightChangesChecked,
   toggleHighlightChanges,
-  waitForResponseCount,
   waitForShowRevisionMatching,
   type ShowRevisionBuf,
   type ShowRevisionResponse,
