@@ -123,8 +123,8 @@ function revisionInterceptorFunc(): void {
     // SelectedTile — at XHR.open() time, Docs has already moved selection
     // to the target of this request (verified; see "Auto-fired showrevision"
     // in notes). Used by the missing-start workaround to infer start from
-    // the next-older listitem's cached end, even if the neighbor click
-    // happened with drSuppressCapture (which skips the capture branch).
+    // the next-older listitem's cached end, even if the dance's neighbor
+    // click happened with drSuppressCapture (which skips the capture branch).
     if (origEndStr) {
       const oe = parseInt(origEndStr, 10);
       if (Number.isFinite(oe)) {
@@ -209,9 +209,12 @@ function revisionInterceptorFunc(): void {
       //     next-older item (with drSuppressCapture so it only populates the
       //     end cache), then re-click the target — the re-click fires a fresh
       //     showrevision, which this branch rewrites using the now-cached end.
-      // Controlled by drDisableMissingStartWorkaround (tests exercise the
-      // broken behavior) and drMissingStartDance (the content-script handshake).
-      const workaroundDisabled = !!document.body?.dataset.drDisableMissingStartWorkaround;
+      // Off by default in the extension — we're trying a different workaround
+      // for the bug, so this inference / dance path is dormant unless tests
+      // opt in via drEnableMissingStartWorkaround (kept around for coverage
+      // and so we can flip it back on if the alternate approach falls short).
+      // drMissingStartDance is the content-script handshake.
+      const workaroundEnabled = !!document.body?.dataset.drEnableMissingStartWorkaround;
       // Skip the workaround when we don't actually need origStart:
       //   - captureMode='to' with a valid existing curStart < origEnd: the
       //     'to' branch just sets newEnd; origStart is only read in the
@@ -223,7 +226,7 @@ function revisionInterceptorFunc(): void {
         captureMode === 'to' &&
         curStartPeek !== null && Number.isFinite(curStartPeek) &&
         origEnd !== null && curStartPeek < origEnd;
-      if (origStart === null && origEnd !== null && !workaroundDisabled && !toModeDoesntNeedStart) {
+      if (origStart === null && origEnd !== null && workaroundEnabled && !toModeDoesntNeedStart) {
         const pendingEl = document.querySelector('.dr-pending-capture');
         const allItems = Array.from(document.querySelectorAll('[aria-label="Versions"] [role="listitem"]'));
         const pendingIdx = pendingEl ? allItems.indexOf(pendingEl) : -1;
@@ -424,6 +427,13 @@ function revisionInterceptorFunc(): void {
       url = base + '?' + searchParams.toString();
     }
 
+    // Clear the toggle-refetch sentinel set by content-revisions before its
+    // checkbox.click() pair. waitForCaptureSettled gates on this so tests
+    // don't read the rewrite log before it's been written. Unconditional —
+    // we just want to know "a showrevision arrived after the toggle"; whether
+    // it was rewritten or passed through doesn't matter for that signal.
+    delete document.body?.dataset.drToggleRefetchPending;
+
     return url;
   }
 
@@ -548,21 +558,22 @@ function revisionInterceptorFunc(): void {
   //                                   outgoing URL too, mirroring the real
   //                                   bug). Reload the page or call with
   //                                   false to restore.
-  //   drDisableMissingStartWorkaround(true) — short-circuit the inference/
-  //                                           dance; lets you see the
-  //                                           broken behavior end-to-end.
-  // Combine: `drSimulateMissingStart(true); drDisableMissingStartWorkaround(true)`
-  // for the full broken baseline; turn only the first on to see the fix.
+  //   drEnableMissingStartWorkaround(true) — turn the inference / dance fix
+  //                                           back on (off by default in the
+  //                                           extension). Combine with
+  //                                           drSimulateMissingStart(true) to
+  //                                           watch the workaround repair the
+  //                                           simulated bug end-to-end.
   window.drSimulateMissingStart = function(enabled: boolean): void {
     if (enabled) document.body.dataset.drSimulateMissingStart = '1';
     else delete document.body.dataset.drSimulateMissingStart;
     console.log('[DiffRange] drSimulateMissingStart = ' + !!enabled);
   };
-  window.drDisableMissingStartWorkaround = function(enabled: boolean): void {
-    if (enabled) document.body.dataset.drDisableMissingStartWorkaround = '1';
-    else delete document.body.dataset.drDisableMissingStartWorkaround;
-    console.log('[DiffRange] drDisableMissingStartWorkaround = ' + !!enabled);
+  window.drEnableMissingStartWorkaround = function(enabled: boolean): void {
+    if (enabled) document.body.dataset.drEnableMissingStartWorkaround = '1';
+    else delete document.body.dataset.drEnableMissingStartWorkaround;
+    console.log('[DiffRange] drEnableMissingStartWorkaround = ' + !!enabled);
   };
 
-  console.log('[DiffRange] revision interceptor installed (showRevisions(), openVersionHistory(), drSimulateMissingStart(), drDisableMissingStartWorkaround() available)');
+  console.log('[DiffRange] revision interceptor installed (showRevisions(), openVersionHistory(), drSimulateMissingStart(), drEnableMissingStartWorkaround() available)');
 }

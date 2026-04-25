@@ -4,7 +4,8 @@
  * Docs sometimes fires showrevision URLs without `start=` on large docs — a
  * sticky bug. The extension simulates this via
  * `body.dataset.drSimulateMissingStart` so we can test both the broken
- * baseline (workaround disabled) and the fix (workaround enabled).
+ * baseline (workaround off — the extension default) and the fix (workaround
+ * enabled via drEnableMissingStartWorkaround).
  *
  * These tests need the sweep populated so the workaround tests can compare
  * against known-good per-version contents (and so the fast-path test has
@@ -18,7 +19,7 @@ import {
   clickListitem,
   clickFrom,
   setSimulateMissingStart,
-  setDisableMissingStartWorkaround,
+  setEnableMissingStartWorkaround,
   clearPerListitemCache,
 } from './helpers';
 import {
@@ -34,14 +35,14 @@ registerBeforeEachReset();
 registerContentChainSweep(recorder);
 
 test('missing-start simulation without workaround: mid-range diff contents are wrong', async ({ page, diffResponses }) => {
-  // Turn on simulation and disable the workaround. Clicking a non-init version
-  // should produce a diff that doesn't match that version's expected contents:
-  // with `start` stripped and no workaround, the interceptor can't learn a new
-  // start, so overrides stay stuck at init-capture's (item[0]'s) range. The
-  // URL gets rewritten with that stale start — a wrong range — and Docs
-  // returns contents that don't match item 2's true diff.
+  // Turn on simulation. The workaround is off by default in the extension so
+  // we don't need to opt out. Clicking a non-init version should produce a
+  // diff that doesn't match that version's expected contents: with `start`
+  // stripped and no workaround, the interceptor can't learn a new start, so
+  // overrides stay stuck at init-capture's (item[0]'s) range. The URL gets
+  // rewritten with that stale start — a wrong range — and Docs returns
+  // contents that don't match item 2's true diff.
   await setSimulateMissingStart(page, true);
-  await setDisableMissingStartWorkaround(page, true);
 
   await clickListitem(page, 2);
   const { before, after } = await extractDiffContents(page, diffResponses, 10000);
@@ -61,6 +62,7 @@ test('missing-start workaround (fast path): neighbor cached, mid-range diff is c
   // finds the next-older listitem's cached end and infers start directly
   // without dancing.
   await setSimulateMissingStart(page, true);
+  await setEnableMissingStartWorkaround(page, true);
 
   await clickListitem(page, 2);
   await expectRangeAndContents(page, diffResponses, recorder, 2, 2);
@@ -73,6 +75,7 @@ test('missing-start workaround (dance path): clears cache, drives neighbor-recli
   // then re-clicks the target (which now lands the correct range).
   await clearPerListitemCache(page);
   await setSimulateMissingStart(page, true);
+  await setEnableMissingStartWorkaround(page, true);
 
   await clickListitem(page, 2);
   await expectRangeAndContents(page, diffResponses, recorder, 2, 2);
@@ -89,6 +92,7 @@ test('missing-start workaround: clicking the oldest version uses start=1, before
   // scheduling the dance. We don't clearPerListitemCache here since the
   // oldest-branch doesn't read it.
   await setSimulateMissingStart(page, true);
+  await setEnableMissingStartWorkaround(page, true);
 
   const n = recorder.itemCount;
   expect(n).toBeGreaterThan(1);
@@ -107,6 +111,7 @@ test('missing-start workaround: From/To on missing-start version preserves the o
   // stashed 'from' mode so the existing To endpoint survives.
   await clearPerListitemCache(page);
   await setSimulateMissingStart(page, true);
+  await setEnableMissingStartWorkaround(page, true);
 
   // Init leaves From=To=0. Click "From here" on item 3 — the interceptor
   // can't read start (simulation), schedules the dance, and the dance's
@@ -122,6 +127,7 @@ test('missing-start workaround: content chain holds over several mid-range click
   // Exercises the full loop: each click fast-paths off the prior click's
   // cached end.
   await setSimulateMissingStart(page, true);
+  await setEnableMissingStartWorkaround(page, true);
 
   for (const idx of [1, 2, 3]) {
     await clickListitem(page, idx);

@@ -84,7 +84,14 @@ async function waitForCaptureSettled(page: Page, timeoutMs = 3000): Promise<void
       // flag being set and the MutationObserver task firing, the other two
       // conditions are briefly both true — so without this guard a poll
       // could return "settled" mid-dance.
-      !document.body.dataset.drMissingStartDance,
+      !document.body.dataset.drMissingStartDance &&
+      // And wait for the Highlight-changes toggle refetch to land. Docs'
+      // checkbox change handler fires its showrevision XHR ~300ms after
+      // the click (async), so without this gate tests would read the
+      // rewrite log before it's been written. Set by content-revisions
+      // before toggling, cleared by the interceptor when the first rewrite
+      // completes.
+      !document.body.dataset.drToggleRefetchPending,
     null,
     { timeout: timeoutMs }
   );
@@ -245,9 +252,11 @@ export async function clickTo(page: Page, idx: number): Promise<void> {
 }
 
 /**
- * Click the "Diff full history" button (above the revisions list). The click
- * may fire one or two showrevisions (click-away-then-back trick) and the
- * capture flow applies highlights + overrides synchronously with each.
+ * Click the "Diff full history" button (above the revisions list). When
+ * item[0] isn't selected, this fires one showrevision via a programmatic
+ * click on item[0]. When item[0] is already selected, it toggles "Highlight
+ * changes" twice to force two showrevisions without disturbing the selection.
+ * Either way the capture flow applies highlights + overrides synchronously.
  */
 export async function clickDiffFullHistory(page: Page): Promise<void> {
   await page.locator('.dr-full-history-btn').click();
@@ -520,14 +529,15 @@ export async function setSimulateMissingStart(page: Page, enabled: boolean): Pro
 }
 
 /**
- * Toggle the workaround itself. When disabled, the interceptor falls through
- * on a missing-start URL without inferring `start` or scheduling the dance —
- * used to verify the "broken" baseline that the workaround then repairs.
+ * Toggle the workaround itself. The extension ships with it off (we're trying
+ * a different workaround for the underlying Docs bug), so tests that want to
+ * exercise the inference / dance code paths must turn it on explicitly. Tests
+ * that verify the "broken" baseline simply leave it off.
  */
-export async function setDisableMissingStartWorkaround(page: Page, enabled: boolean): Promise<void> {
+export async function setEnableMissingStartWorkaround(page: Page, enabled: boolean): Promise<void> {
   await page.evaluate((v) => {
-    if (v) document.body.dataset.drDisableMissingStartWorkaround = '1';
-    else delete document.body.dataset.drDisableMissingStartWorkaround;
+    if (v) document.body.dataset.drEnableMissingStartWorkaround = '1';
+    else delete document.body.dataset.drEnableMissingStartWorkaround;
   }, enabled);
 }
 

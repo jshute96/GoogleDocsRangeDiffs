@@ -83,20 +83,23 @@ test('with a range selected, clicking an item (inside or outside) resets to from
   await expectRangeAndContents(page, diffResponses, recorder, 2, 2);
 });
 
-test('click on already-selected listitem: highlights stay on target, not neighbor', async ({ page, diffResponses }) => {
-  // Regression: captureForSelected clicks a neighbor to force a fresh
-  // showrevision when the user clicks on the already-selected tile. Docs
-  // moves SelectedTile onto the neighbor as a side effect, and the
-  // MutationObserver's restoreBothOnSelectedIfFlagged would follow
-  // SelectedTile and relocate From/To highlights to the neighbor. The fix
-  // pins the anchor to whichever listitem already holds both highlights,
-  // falling back to SelectedTile only on DOM-wipe.
+test('click on already-selected listitem: highlights stay on target', async ({ page, diffResponses }) => {
+  // captureForSelected forces a fresh showrevision when the user clicks
+  // From/To/Diff on the already-selected tile. The current mechanism is
+  // toggling Docs' "Highlight changes" checkbox twice — SelectedTile
+  // doesn't move during that, so highlights staying on the target is the
+  // direct consequence.
+  //
+  // (Historical: an older click-away-then-back trick clicked a neighbor,
+  // which moved SelectedTile and required restoreBothOnSelectedIfFlagged
+  // to pin the anchor. This test originally guarded that pin; under the
+  // toggle mechanism the anchoring is mechanism-free, but the test still
+  // covers the user-visible invariant: the right item ends up highlighted.)
   //
   // Scenario: clickFrom(3) selects item 3 (range 3..0, divergent). Then
   // clickListitem(3) routes through captureForSelected(item3, 'both'):
-  // tookBoth=true, rangeChanged=true → drBothOnSelected=1 set, neighbor
-  // click fires. Highlights must end up on item 3 (the target), not on
-  // item 4 (the neighbor our click-away picks).
+  // tookBoth=true, rangeChanged=true → drBothOnSelected=1 set, refetch
+  // fires via the checkbox toggle. Highlights must end up on item 3.
   await clickFrom(page, 3);
   await expectRangeAndContents(page, diffResponses, recorder, 3, 0);
   await clickListitem(page, 3);

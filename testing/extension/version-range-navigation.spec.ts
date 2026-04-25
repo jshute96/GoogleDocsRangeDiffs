@@ -96,7 +96,8 @@ test('Diff full history (item[0] already selected): spans full list, item[0] sta
 
   // Range spans from oldest (item[n-1]) to newest (item[0]).
   await expectRange(page, n - 1, 0);
-  // item[0] remains Docs-selected (click-away-then-back).
+  // item[0] remains Docs-selected — the toggle-twice refetch doesn't
+  // disturb SelectedTile.
   const after = await getRangeState(page);
   expect(after.selectedIdx).toBe(0);
   // Overrides reflect the full range: start=1, end=maxRev.

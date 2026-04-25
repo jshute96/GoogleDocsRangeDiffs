@@ -82,9 +82,28 @@ class does not trick Docs into treating a click as a fresh selection.
 ### Clicking the already-selected version is a no-op
 
 Clicking (or programmatically `.click()`-ing) a listitem that's already
-selected does **not** fire a new `showrevision` request. To force Docs to
-refetch for a target range, click a *different* listitem and rewrite the
-resulting URL.
+selected does **not** fire a new `showrevision` request.
+
+To force Docs to refetch for the same selected version without visually
+moving the selection, **toggle the "Highlight changes" checkbox twice**
+(at the bottom of the Version History pane). The checkbox controls
+diff-view (checked → URL has both `start` and `end`) vs single-revision
+view (unchecked → URL has only `end`). Each toggle fires a fresh
+`showrevision` that the interceptor's rewrite branch picks up; toggling
+twice returns the checkbox to its initial state. SelectedTile stays put
+(verified — no class changes observed during a probe).
+
+Locate the checkbox by label text — element ids and classes are dynamic:
+
+```js
+const label = [...document.querySelectorAll('label')]
+  .find(l => l.textContent.trim() === 'Highlight changes');
+const input = label && document.getElementById(label.htmlFor);
+```
+
+The older approach was to click a *different* listitem and then click
+back ("click-away-then-back"); that's now retained only inside the
+missing-start dance, which has its own constraints.
 
 ### Label (date) clicks vs body clicks
 
@@ -342,7 +361,7 @@ them via event-phase tricks:
 
 - That branch is for body clicks on the already-selected tile. Docs
   won't re-fire showrevision in that case, so it uses the item's
-  cached `drNaturalStart/End` + a neighbor-click trick.
+  cached `drNaturalStart/End` + the Highlight-changes toggle trick.
 - Arrows don't need the trick — they always fire a fresh
   showrevision.
 - The arrow's *new* range may differ from the cached one (expanding
@@ -397,12 +416,12 @@ classes disappear with the old nodes.
   single anchor listitem.
 - Anchor selection: prefer the listitem that currently holds both
   From and To highlights; only fall back to SelectedTile when no
-  item holds both. This matters because `captureForSelected` clicks
-  a neighbor to force a fresh showrevision, which makes Docs move
-  SelectedTile onto the neighbor — but the intended anchor is still
-  the original target (where we synchronously placed the highlights
-  before the neighbor click). Falling back to SelectedTile only on
-  wipe preserves the arrow-expand restoration path.
+  item holds both. The toggle-driven refetch in `captureForSelected`
+  doesn't move SelectedTile, so the prefer-existing-anchor rule
+  rarely matters for that path now — its main role is keeping the
+  highlights pinned across DOM-wipe events (arrow-expand re-render),
+  where SelectedTile fallback handles the case where every highlight
+  was lost with the old nodes.
 - Cleared on any divergent capture (From/To diverge) and on
   `resetRevisionOverrides`. `handleFullHistoryClick` clears it
   explicitly since it sets a wide split range.
@@ -449,14 +468,15 @@ diff of the entire history:
   on the newest (`items[0]`), in-between on the middle items.
 - Forces a fresh `showrevision` and leaves the newest version as the
   Docs-selected tile:
-  - If `items[0]` is already selected, use the click-away-then-back trick
-    — click a neighbor (deselects `items[0]`, fires showrevision for the
-    neighbor), then click `items[0]` back (reselects, fires a second
-    showrevision). Both requests get rewritten to `[1, maxRev]`.
-  - If `items[0]` is not selected, click it directly.
-- Sets `drSuppressCapture` during the clicks so the listitem-mousedown
-  delegation can't overwrite the overrides, and clears any armed
-  `drInitCapture` for the same reason.
+  - If `items[0]` is already selected, toggle the "Highlight changes"
+    checkbox twice. Each toggle fires a showrevision (uncheck →
+    end-only, recheck → start+end); both get rewritten to
+    `[1, maxRev]`. SelectedTile stays on `items[0]` throughout.
+  - If `items[0]` is not selected, click it directly (selects + fires
+    a single showrevision).
+- Sets `drSuppressCapture` during the listitem click (belt-and-braces
+  since `.click()` doesn't fire mousedown) and clears any armed
+  `drInitCapture` so it can't repopulate the overrides we just set.
 
 ### Deferred highlight for newly-appeared listitems
 

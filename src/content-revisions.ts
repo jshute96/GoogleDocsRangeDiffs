@@ -170,18 +170,16 @@
 
   // If body.dataset.drBothOnSelected is set (the last capture landed From and
   // To on the same listitem), make sure both highlights stay together on one
-  // anchor item. Handles DOM-wipe cases (e.g. arrow-expand re-renders our
-  // injected buttons) by re-applying the highlights to the fresh nodes.
+  // anchor item. Mainly relevant for DOM-wipe cases — e.g. arrow-expand
+  // re-renders our injected buttons, dropping their highlight classes — by
+  // re-applying both highlights to the fresh nodes.
   //
-  // Anchor selection is critical: captureForSelected clicks a *neighbor* to
-  // force a fresh showrevision after a click on the already-selected tile,
-  // which makes Docs move SelectedTile onto the neighbor. The intended
-  // highlight anchor is still the original target (where we synchronously
-  // placed the highlights before the neighbor click), NOT SelectedTile. So:
+  // Anchor selection:
   //   1. Prefer the listitem that currently holds both From and To — that's
-  //      the intended anchor, whether or not it wears SelectedTile.
-  //   2. Only fall back to SelectedTile when no item holds both (e.g. a
-  //      DOM-wipe dropped the highlights entirely).
+  //      the intended anchor.
+  //   2. Fall back to SelectedTile when no item holds both (e.g. a DOM-wipe
+  //      dropped the highlights entirely; reapply on whichever revision is
+  //      now selected).
   // The flag persists until a capture diverges From/To or overrides reset.
   function restoreBothOnSelectedIfFlagged(): void {
     if (!document.body.dataset.drBothOnSelected) return;
@@ -225,16 +223,47 @@
     return c.indexOf('SelectedTile') !== -1 && c.indexOf('UnselectedTile') === -1;
   }
 
+  // Locate Docs' "Highlight changes" checkbox at the bottom of the Version
+  // History pane. We toggle this checkbox twice to force Docs to re-fire
+  // showrevision on the currently-selected version without visually clicking
+  // away — the interceptor's rewrite branch then applies our overrides to the
+  // outgoing URL. The checkbox controls diff-view vs single-revision-view:
+  // unchecked fires showrevision?end=E (no start), checked fires
+  // showrevision?start=S&end=E. Both URLs are equally rewritable, so toggling
+  // direction-agnostically (.click() twice) leaves the checkbox in its
+  // original state and produces two refetches with our range applied.
+  // Identify by label text — element ids and classes are dynamic.
+  function findHighlightChangesCheckbox(): HTMLInputElement | null {
+    const label = Array.from(document.querySelectorAll('label'))
+      .find((l) => l.textContent?.trim() === 'Highlight changes') as HTMLLabelElement | undefined;
+    if (!label) return null;
+    return document.getElementById(label.htmlFor) as HTMLInputElement | null;
+  }
+
+  // Wraps a Highlight-changes toggle pair. Docs' change handler fires its
+  // showrevision XHR ~300ms after the click (async, not synchronous like a
+  // listitem .click()), so a flag is the only reliable synchronous-from-the-
+  // outside signal that "a refetch is pending." The interceptor clears this
+  // flag when the next showrevision rewrite lands; tests' waitForCaptureSettled
+  // gates on it so they don't poll the rewrite log too early.
+  function toggleHighlightChangesTwice(checkbox: HTMLInputElement): void {
+    document.body.dataset.drToggleRefetchPending = '1';
+    checkbox.click();
+    checkbox.click();
+  }
+
   // Handle a From/To click on the already-selected version. Docs won't fire a
   // new showrevision for it, so we can't capture via the normal flow. Instead:
   //  1. Use the natural start/end cached on this item by a prior capture.
   //  2. Compute the new range from mode + current override values (same logic
   //     as the MAIN-world capture branch).
   //  3. Update highlights and window overrides directly.
-  //  4. Click a neighbor listitem (with drSuppressCapture) to force a
-  //     showrevision that the interceptor rewrites to the new range.
+  //  4. Toggle Docs' "Highlight changes" checkbox twice to force a fresh
+  //     showrevision pair the interceptor rewrites to the new range. The
+  //     selected listitem stays SelectedTile throughout — no visual click-away.
   // Returns true if handled; false if the caller should fall back to the
-  // normal capture path (e.g. no cached natural range yet).
+  // normal capture path (e.g. no cached natural range yet, or the checkbox
+  // is missing).
   function captureForSelected(item: Element, mode: string): boolean {
     const natStart = (item as HTMLElement).dataset.drNaturalStart;
     const natEnd = (item as HTMLElement).dataset.drNaturalEnd;
@@ -285,7 +314,7 @@
     // Keep drBothOnSelected in sync with the final highlight state: set when
     // From and To both landed on this (selected) item, clear otherwise. The
     // interceptor's capture branch does the same — captureForSelected
-    // bypasses that branch (no captureMode set during the neighbor click),
+    // bypasses that branch (the toggle-driven refetch fires no capture mode),
     // so we must maintain the flag here too, otherwise a later expand would
     // misfire the restore logic.
     if (tookBoth) document.body.dataset.drBothOnSelected = '1';
@@ -299,22 +328,10 @@
       return true;
     }
 
-    // Range is changing — need a fresh showrevision via a neighbor click.
-    // Find the neighbor first so we don't half-update state if none exists.
-    // Prefer an adjacent revision (next-older, then next-newer) over the
-    // topmost one: clicking the top item scrolls the list and sometimes
-    // doesn't scroll back properly.
-    const items = document.querySelectorAll('[aria-label="Versions"] [role="listitem"]');
-    let idx = -1;
-    for (let i = 0; i < items.length; i++) {
-      if (items[i] === item) { idx = i; break; }
-    }
-    let neighbor: HTMLElement | null = null;
-    if (idx !== -1) {
-      if (idx + 1 < items.length) neighbor = items[idx + 1] as HTMLElement;
-      else if (idx - 1 >= 0) neighbor = items[idx - 1] as HTMLElement;
-    }
-    if (!neighbor) return false;
+    // Range is changing — need a fresh showrevision. Find the checkbox up
+    // front so we don't half-update state if it's missing.
+    const checkbox = findHighlightChangesCheckbox();
+    if (!checkbox) return false;
 
     if (mode === 'from' || tookBoth) clearAndHighlight('dr-version-from-btn');
     if (mode === 'to' || tookBoth) clearAndHighlight('dr-version-to-btn');
@@ -322,12 +339,11 @@
 
     setDatasetOverrides(newStart, newEnd);
 
-    document.body.dataset.drSuppressCapture = '1';
-    try {
-      neighbor.click();
-    } finally {
-      delete document.body.dataset.drSuppressCapture;
-    }
+    // Toggle twice — first toggle fires showrevision (with or without `start`
+    // depending on the new state); second toggle restores the checkbox state
+    // and fires another showrevision. Both go through the interceptor's
+    // rewrite branch with the overrides we just set.
+    toggleHighlightChangesTwice(checkbox);
     return true;
   }
 
@@ -427,10 +443,11 @@
   // re-issue a showrevision so the rewritten URL is fetched. The newest
   // version (item[0]) must end up as the Docs-selected tile:
   //   - If item[0] is NOT currently selected: click it (selects + refetch).
-  //   - If item[0] IS currently selected: click-away-then-back (neighbor
-  //     click deselects, then item[0] click reselects and refetches).
-  // drSuppressCapture is set during both clicks so the listitem mousedown
-  // delegation doesn't overwrite the overrides we just set.
+  //   - If item[0] IS currently selected: toggle "Highlight changes" twice
+  //     to force a re-fetch without disturbing the selection.
+  // drSuppressCapture is set during the listitem click so the mousedown
+  // delegation doesn't overwrite the overrides we just set (belt-and-braces;
+  // .click() doesn't fire mousedown).
   function handleFullHistoryClick(): void {
     const maxRevStr = document.body.dataset.drMaxRev;
     if (!maxRevStr) {
@@ -477,23 +494,23 @@
     // our overrides.
     delete document.body.dataset.drInitCapture;
 
-    document.body.dataset.drSuppressCapture = '1';
-    try {
-      if (isSelected(first)) {
-        // item[0] already selected: Docs treats a click on it as a no-op, so
-        // click a neighbor first to deselect, then click item[0] to reselect
-        // and force a fresh showrevision. When there's only one item, we
-        // can't do the trick — overrides are still set and highlights
-        // updated, but no refetch happens (harmless for a single-version doc).
-        const neighbor = items.length > 1 ? (items[1] as HTMLElement) : null;
-        if (!neighbor) return;
-        neighbor.click();
+    if (isSelected(first)) {
+      // item[0] already selected: Docs treats a click on it as a no-op. Toggle
+      // Highlight changes twice to force two showrevision XHRs the interceptor
+      // rewrites; SelectedTile stays on item[0]. If the checkbox is missing
+      // (unlikely), overrides + highlights are still updated; no refetch
+      // happens, which is harmless — the user can pick another version to
+      // produce one.
+      const checkbox = findHighlightChangesCheckbox();
+      if (!checkbox) return;
+      toggleHighlightChangesTwice(checkbox);
+    } else {
+      document.body.dataset.drSuppressCapture = '1';
+      try {
         first.click();
-      } else {
-        first.click();
+      } finally {
+        delete document.body.dataset.drSuppressCapture;
       }
-    } finally {
-      delete document.body.dataset.drSuppressCapture;
     }
   }
 
@@ -592,10 +609,11 @@
           blockRenameFocusTimer = null;
         }, 300);
       }
-      // Skip programmatic events from the From / To button handlers and the
-      // neighbor-click trick — they've already set up the correct capture
-      // state themselves. (Note: .click() doesn't dispatch mousedown, so this
-      // mostly guards against future synthetic mousedown dispatches.)
+      // Skip programmatic events from the From / To button handlers, the
+      // missing-start dance's neighbor click, and the full-history listitem
+      // click — they've already set up the correct capture state themselves.
+      // (Note: .click() doesn't dispatch mousedown, so this mostly guards
+      // against future synthetic mousedown dispatches.)
       if (document.body.dataset.drSuppressCapture) return;
       const item = (e.target as Element).closest('[role="listitem"]');
       if (!item) return;
@@ -616,12 +634,13 @@
         }, 400);
       }
       // If the user pressed on the already-selected version via the revision
-      // body/label, Docs won't fire a new showrevision — use the
-      // neighbor-click trick to apply the range from the cached natural
-      // values. The expand/collapse arrow is different: clicking it *does*
-      // fire a showrevision (expanding children changes the range Docs
-      // fetches for this revision), so skip this branch and fall through to
-      // the standard pending-capture path so the fresh URL gets captured.
+      // body/label, Docs won't fire a new showrevision — `captureForSelected`
+      // applies the range from the cached natural values and forces a
+      // refetch by toggling Highlight changes twice. The expand/collapse
+      // arrow is different: clicking it *does* fire a showrevision
+      // (expanding children changes the range Docs fetches for this
+      // revision), so skip this branch and fall through to the standard
+      // pending-capture path so the fresh URL gets captured.
       if (!isArrow && isSelected(item) && captureForSelected(item, 'both')) {
         e.stopPropagation();
         e.preventDefault();

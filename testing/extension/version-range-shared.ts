@@ -30,7 +30,7 @@ import {
   clickListitem,
   resetRange,
   setSimulateMissingStart,
-  setDisableMissingStartWorkaround,
+  setEnableMissingStartWorkaround,
   type DiffContents,
   type DiffResponseBuf,
 } from './helpers';
@@ -71,7 +71,7 @@ export function registerBeforeEachReset(): void {
     // baseline range is populated correctly before any simulation test
     // enables its flags.
     await setSimulateMissingStart(page, false);
-    await setDisableMissingStartWorkaround(page, false);
+    await setEnableMissingStartWorkaround(page, false);
     await resetRange(page);
   });
 }

@@ -2,6 +2,12 @@
 
 Tracked upstream in [issue #2](https://github.com/jshute96/GoogleDocsDiffRange/issues/2).
 
+**Status: off by default in the extension.** We are attempting a different
+workaround, so the inference / dance code is skipped unless
+`drEnableMissingStartWorkaround(true)` is called. The tests still enable it
+explicitly to keep coverage of the code paths, since we can re-enable the
+workaround if the bug resurfaces.
+
 ## The bug
 
 Google Docs sometimes fires a `showrevision` request without a `start` parameter (e.g., just `?end=81409`).
@@ -102,7 +108,7 @@ When `captureMode='to'` and the existing `curStart < origEnd`, the capture branc
 Tests live in `testing/extension/version-range-missing-start.spec.ts`. Helpers in `testing/extension/helpers.ts`:
 
 - `setSimulateMissingStart(page, true/false)` — toggles `body.dataset.drSimulateMissingStart`. When set, the interceptor strips `start` from every URL (outgoing + its own reading), mirroring the real Docs bug.
-- `setDisableMissingStartWorkaround(page, true/false)` — toggles `body.dataset.drDisableMissingStartWorkaround`. Short-circuits the inference/dance; used for the "broken baseline" assertion.
+- `setEnableMissingStartWorkaround(page, true/false)` — toggles `body.dataset.drEnableMissingStartWorkaround`. Workaround is off by default in the extension; tests that exercise the inference/dance must opt in.
 - `clearPerListitemCache(page)` — wipes `drNaturalStart` / `drNaturalEnd` from every listitem. Without this, the content-chain sweep's prior clicks leave every item's end cached, so the workaround always takes path B. Clearing forces path C.
 
 `waitForCaptureSettled` also waits for `drMissingStartDance` to be absent — the MutationObserver runs the dance synchronously in one microtask, but between `XHR.open` returning and the observer firing, `drCaptureMode` / pending are briefly clear. Polling without this check would return "settled" mid-dance.
@@ -126,11 +132,11 @@ Tests live in `testing/extension/version-range-missing-start.spec.ts`. Helpers i
 The simulation flags are exposed as console functions (set in `background-injected.ts`). From DevTools on any Google Docs page with the extension loaded:
 
 ```javascript
-drSimulateMissingStart(true)      // pretend Docs dropped `start`
-drDisableMissingStartWorkaround(true)  // short-circuit the fix
+drSimulateMissingStart(true)           // pretend Docs dropped `start`
+drEnableMissingStartWorkaround(true)   // turn the fix on (off by default)
 ```
 
-Pass `false` to restore. With both on, clicking versions produces wrong diffs (the broken baseline). Turn `drDisableMissingStartWorkaround(false)` and click again — content becomes correct, and you'll see the workaround log lines:
+Pass `false` to restore. With only simulation on, clicking versions produces wrong diffs (the broken baseline — the extension's default state plus the simulated bug). Turn `drEnableMissingStartWorkaround(true)` and click again — content becomes correct, and you'll see the workaround log lines:
 
 ```
 [DiffRange] orig request (simulated missing start): ? to 10 (mode=both)

@@ -200,7 +200,7 @@ npm run test:no-extension    # no-extension only
 ### Missing-start workaround tests (issue #2)
 
 Automated-test helpers (`setSimulateMissingStart`,
-`setDisableMissingStartWorkaround`, `clearPerListitemCache`), the
+`setEnableMissingStartWorkaround`, `clearPerListitemCache`), the
 `waitForCaptureSettled` dance-aware check, and test coverage are all
 documented in
 [`fix-google-docs-start-version-bug.md`](fix-google-docs-start-version-bug.md).
@@ -212,10 +212,11 @@ bug against any real doc without editing a huge one:
 
 - `drSimulateMissingStart(true)` — strips `start` from every showrevision
   URL (outgoing + the interceptor's reading), mirroring the real bug.
-- `drDisableMissingStartWorkaround(true)` — short-circuits the fix.
+- `drEnableMissingStartWorkaround(true)` — turns the fix on. Off by
+  default in the extension.
 
-Combine to see the broken baseline; turn off
-`drDisableMissingStartWorkaround` to watch the workaround repair it live.
+Turn simulation on alone to see the broken baseline; add
+`drEnableMissingStartWorkaround(true)` to watch the workaround repair it live.
 Expected log sequence for the dance path is in
 [`fix-google-docs-start-version-bug.md`](fix-google-docs-start-version-bug.md).
 Reload the extension + the doc after `npm run build` so the toggles
