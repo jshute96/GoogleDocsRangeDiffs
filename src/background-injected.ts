@@ -124,14 +124,16 @@ function revisionInterceptorFunc(): void {
     const origStartStr = searchParams.get('start');
     const origEndStr = searchParams.get('end');
 
-    // Sanity check: in Versions mode, Highlight changes is unchecked, so
-    // every showrevision should arrive with no `start`. If one shows up
-    // anyway something has driven Docs into a state we didn't expect —
-    // e.g., the user manually re-checked the checkbox under our feet, or
-    // a programmatic toggle path didn't bookkeep drMode. Log loudly so the
-    // mismatch is obvious in tests + DevTools.
+    // Note: in Versions mode we expect `start` to be absent on incoming
+    // URLs (Highlight changes is unchecked under normal polarity, which
+    // makes Docs produce no-start URLs). Polarity inversion (issue #2)
+    // can flip this — checkbox unchecked + inverted polarity produces
+    // start+end URLs. The rewrite branch strips `start` regardless of
+    // polarity so the displayed content stays consistent with the user's
+    // selected mode, but the divergence is worth logging at info level
+    // for diagnosis.
     if (origStartStr && document.body?.dataset.drMode === 'versions') {
-      console.warn('[DiffRange] Versions mode invariant: showrevision arrived with start=' + origStartStr + ' (expected none)');
+      console.log('[DiffRange] Versions mode: incoming URL had start=' + origStartStr + ' (likely polarity inversion); will strip on rewrite');
     }
 
     // Cache each showrevision's `end` onto whichever listitem is currently
@@ -218,22 +220,25 @@ function revisionInterceptorFunc(): void {
       let origStart = origStartStr ? parseInt(origStartStr, 10) : null;
       const origEnd = origEndStr ? parseInt(origEndStr, 10) : null;
 
-      // Missing-start workaround (issue #2): Docs sometimes fires a
-      // showrevision without a `start` param on large docs; once it happens
-      // the state is sticky. With `start` missing, we can't read the target
-      // version's natural lower bound from the URL — so infer it.
-      //   - Target is the oldest listitem → start = 1 (rev 1 is always first).
-      //   - Next-older listitem has a cached `end` → start = cachedEnd + 1
-      //     (each version's `start` is the adjacent older version's `end + 1`).
-      //   - Otherwise schedule a "dance" in the content script: click the
-      //     next-older item (with drSuppressCapture so it only populates the
-      //     end cache), then re-click the target — the re-click fires a fresh
-      //     showrevision, which this branch rewrites using the now-cached end.
-      // Off by default in the extension — we're trying a different workaround
-      // for the bug, so this inference / dance path is dormant unless tests
-      // opt in via drEnableMissingStartWorkaround (kept around for coverage
-      // and so we can flip it back on if the alternate approach falls short).
-      // drMissingStartDance is the content-script handshake.
+      // Missing-start handling (issue #2): Docs sometimes fires a
+      // showrevision without a `start` param on large docs; the bug is
+      // sticky in the polarity it leaves the session in (see
+      // docs/fix-google-docs-start-version-bug.md "Trigger" / "Recovery").
+      // With `start` missing, we can't read the target version's natural
+      // lower bound from the URL.
+      //
+      // Default approach (the polarity-fix path): set drPendingPolarityFix
+      // and bail. Content script clicks the "Highlight changes" checkbox
+      // once; Docs fires a follow-up showrevision that — under either
+      // polarity — carries `start`, and that pass through the same capture
+      // branch with drCaptureMode still armed completes the capture.
+      //
+      // Legacy approach (dance + inference): off by default. The interceptor
+      // uses cached natural ends to compute start, falling back to a
+      // neighbor-click "dance" handshake. Kept around behind
+      // drEnableMissingStartWorkaround so the existing missing-start spec
+      // can still verify it, and so we have a fallback if the polarity-fix
+      // path falls short.
       const workaroundEnabled = !!document.body?.dataset.drEnableMissingStartWorkaround;
       // Skip the workaround when we don't actually need origStart:
       //   - captureMode='to' with a valid existing curStart < origEnd: the
@@ -246,62 +251,97 @@ function revisionInterceptorFunc(): void {
         captureMode === 'to' &&
         curStartPeek !== null && Number.isFinite(curStartPeek) &&
         origEnd !== null && curStartPeek < origEnd;
-      if (origStart === null && origEnd !== null && workaroundEnabled && !toModeDoesntNeedStart) {
-        const pendingEl = document.querySelector('.dr-pending-capture');
-        const allItems = Array.from(document.querySelectorAll('[aria-label="Versions"] [role="listitem"]'));
-        const pendingIdx = pendingEl ? allItems.indexOf(pendingEl) : -1;
+      if (origStart === null && origEnd !== null && !toModeDoesntNeedStart) {
+        if (workaroundEnabled) {
+          const pendingEl = document.querySelector('.dr-pending-capture');
+          const allItems = Array.from(document.querySelectorAll('[aria-label="Versions"] [role="listitem"]'));
+          const pendingIdx = pendingEl ? allItems.indexOf(pendingEl) : -1;
 
-        if (pendingIdx === -1) {
-          console.log('[DiffRange] missing-start workaround: end=' + origEnd + ', no pending-capture listitem — skipping');
+          if (pendingIdx === -1) {
+            console.log('[DiffRange] missing-start workaround: end=' + origEnd + ', no pending-capture listitem — skipping');
 
-        } else if (pendingIdx === allItems.length - 1) {
-          origStart = 1;
-          console.log('[DiffRange] missing-start workaround: end=' + origEnd + ', target idx=' + pendingIdx + ' is oldest — using start=1');
+          } else if (pendingIdx === allItems.length - 1) {
+            origStart = 1;
+            console.log('[DiffRange] missing-start workaround: end=' + origEnd + ', target idx=' + pendingIdx + ' is oldest — using start=1');
 
-        } else {
-          // Path B: try to infer from the next-older listitem's cached end.
-          const neighbor = allItems[pendingIdx + 1] as HTMLElement;
-          const cachedEnd = neighbor.dataset.drNaturalEnd;
-          if (cachedEnd) {
-            const ce = parseInt(cachedEnd, 10);
-            if (Number.isFinite(ce)) {
-              origStart = ce + 1;
-              console.log('[DiffRange] missing-start workaround: end=' + origEnd + ', inferred start=' + origStart + ' from cached end of next-older (idx=' + (pendingIdx + 1) + ')');
+          } else {
+            // Path B: try to infer from the next-older listitem's cached end.
+            const neighbor = allItems[pendingIdx + 1] as HTMLElement;
+            const cachedEnd = neighbor.dataset.drNaturalEnd;
+            if (cachedEnd) {
+              const ce = parseInt(cachedEnd, 10);
+              if (Number.isFinite(ce)) {
+                origStart = ce + 1;
+                console.log('[DiffRange] missing-start workaround: end=' + origEnd + ', inferred start=' + origStart + ' from cached end of next-older (idx=' + (pendingIdx + 1) + ')');
+              }
+            }
+
+            if (origStart === null) {
+              // Path C — hand off to the content-script dance.
+              //
+              // Stash the capture mode so the re-click preserves From/To intent
+              // (not collapsing to 'both').
+              //
+              // Stash existing overrides so the neighbor click doesn't rewrite
+              // its URL to the stale range (would waste a request and flash the
+              // old diff); the re-click's capture branch sees them as "current"
+              // to combine with the inferred start. The dance handler restores
+              // both before the re-click.
+              console.log('[DiffRange] missing-start workaround: end=' + origEnd + ', no cached neighbor — scheduling dance for target idx=' + pendingIdx + ' (mode=' + captureMode + ')');
+              document.body.dataset.drMissingStartDance = String(pendingIdx);
+              document.body.dataset.drMissingStartDanceMode = captureMode;
+
+              const curS = document.body.dataset.drOverrideStart;
+              const curE = document.body.dataset.drOverrideEnd;
+              if (curS) document.body.dataset.drMissingStartDanceStashStart = curS;
+              if (curE) document.body.dataset.drMissingStartDanceStashEnd = curE;
+              setOverrides(undefined, undefined);
+
+              pendingEl?.classList.remove('dr-pending-capture');
+              delete document.body.dataset.drCaptureMode;
+
+              // Clear drBothOnSelected: the user just clicked a different
+              // version, so the previous both-on-selected state no longer
+              // applies. Otherwise the restore-on-reselect observer could
+              // re-apply From+To to whatever listitem Docs selected during the
+              // initial click (pre-dance), overwriting the re-click's capture
+              // and collapsing divergent ranges to from=to=target.
+              delete document.body.dataset.drBothOnSelected;
+
+              return url;
             }
           }
-
-          if (origStart === null) {
-            // Path C — hand off to the content-script dance.
-            //
-            // Stash the capture mode so the re-click preserves From/To intent
-            // (not collapsing to 'both').
-            //
-            // Stash existing overrides so the neighbor click doesn't rewrite
-            // its URL to the stale range (would waste a request and flash the
-            // old diff); the re-click's capture branch sees them as "current"
-            // to combine with the inferred start. The dance handler restores
-            // both before the re-click.
-            console.log('[DiffRange] missing-start workaround: end=' + origEnd + ', no cached neighbor — scheduling dance for target idx=' + pendingIdx + ' (mode=' + captureMode + ')');
-            document.body.dataset.drMissingStartDance = String(pendingIdx);
-            document.body.dataset.drMissingStartDanceMode = captureMode;
-
-            const curS = document.body.dataset.drOverrideStart;
-            const curE = document.body.dataset.drOverrideEnd;
-            if (curS) document.body.dataset.drMissingStartDanceStashStart = curS;
-            if (curE) document.body.dataset.drMissingStartDanceStashEnd = curE;
-            setOverrides(undefined, undefined);
-
-            pendingEl?.classList.remove('dr-pending-capture');
+        } else {
+          // Polarity-fix path (default). Docs sent a no-start URL but we
+          // need a start to complete the capture. Schedule a single
+          // Highlight-changes toggle in the content script — the toggle
+          // makes Docs refire on the same selected listitem with the
+          // opposite kind of URL. Under both polarities, *one* of the
+          // two checkbox states produces a `start+end` URL, so a single
+          // toggle is enough to surface a usable read.
+          //
+          // Keep drCaptureMode and `.dr-pending-capture` in place so the
+          // follow-up XHR routes through this same capture branch and
+          // the application logic runs there.
+          //
+          // Bound retries with drPolarityFixTried — if the toggle's
+          // refetch *also* arrives without `start` (e.g., simulation is
+          // on, which strips start unconditionally; or some pathological
+          // Docs state), we'd otherwise loop forever. Give up gracefully
+          // on the second attempt: clear capture state and let the
+          // rewrite branch pass the URL through. The displayed result
+          // may be wrong, but the loop doesn't pin the page.
+          if (document.body?.dataset.drPolarityFixTried) {
+            console.warn('[DiffRange] polarity fix: still no start after retry — giving up');
+            delete document.body.dataset.drPolarityFixTried;
             delete document.body.dataset.drCaptureMode;
-
-            // Clear drBothOnSelected: the user just clicked a different
-            // version, so the previous both-on-selected state no longer
-            // applies. Otherwise the restore-on-reselect observer could
-            // re-apply From+To to whatever listitem Docs selected during the
-            // initial click (pre-dance), overwriting the re-click's capture
-            // and collapsing divergent ranges to from=to=target.
-            delete document.body.dataset.drBothOnSelected;
-
+            document.querySelector('.dr-pending-capture')?.classList.remove('dr-pending-capture');
+            // Fall through past the capture block — the rewrite branch
+            // will run with whatever overrides exist.
+          } else {
+            console.log('[DiffRange] polarity fix: end=' + origEnd + ', no start — scheduling Highlight-changes toggle (mode=' + captureMode + ')');
+            document.body.dataset.drPolarityFixTried = '1';
+            document.body.dataset.drPendingPolarityFix = '1';
             return url;
           }
         }
@@ -416,6 +456,10 @@ function revisionInterceptorFunc(): void {
       // start with workaround disabled, for instance) would otherwise leave
       // the class on the listitem forever and confuse waiters.
       delete document.body.dataset.drCaptureMode;
+      // Successful capture also clears the polarity-fix retry counter so
+      // the next user click starts fresh — otherwise a single doc-loop
+      // would burn one of the two retry slots permanently.
+      delete document.body.dataset.drPolarityFixTried;
       document.querySelector('.dr-pending-capture')?.classList.remove('dr-pending-capture');
 
       // Init-capture re-arm: if this XHR claimed drInitCapture but came in
@@ -432,13 +476,29 @@ function revisionInterceptorFunc(): void {
     // Rewrite uses the dataset values — the shared-DOM canonical store.
     // The content script can update it synchronously (no postMessage round
     // trip), so the correct values are available at XHR.open() time.
+    const desiredMode = document.body?.dataset.drMode === 'versions' ? 'versions' : 'diffs';
     const startVal = document.body?.dataset.drOverrideStart ?? '';
     const endVal = document.body?.dataset.drOverrideEnd ?? '';
 
-    if (startVal || endVal) {
-      // If we have an override value, apply it — including when Docs omitted
+    if (desiredMode === 'versions') {
+      // Force a single-version display regardless of what kind of URL Docs
+      // is sending. Polarity inversion (issue #2) can leave Docs producing
+      // start+end URLs while we're in Versions mode; without an explicit
+      // strip the URL would pass through and Docs would render a diff.
+      if (origStartStr) searchParams.delete('start');
+      if (endVal && /^\d+$/.test(endVal)) {
+        searchParams.set('end', endVal);
+      }
+      const newStart = searchParams.get('start');
+      const newEnd = searchParams.get('end');
+      if (origStartStr !== newStart || origEndStr !== newEnd) {
+        console.log('[DiffRange] rewrote to: ' + (newStart ?? 'undefined') + ' to ' + (newEnd ?? 'undefined'));
+      }
+      url = base + '?' + searchParams.toString();
+    } else if (startVal || endVal) {
+      // Diffs mode: apply overrides if any — including when Docs omitted
       // the param from the original URL (see issue #2: Docs sometimes drops
-      // `start` on large docs, sticky until the tab is reloaded).
+      // `start` on large docs, sticky in its polarity until polarity flips).
       // https://github.com/jshute96/GoogleDocsDiffRange/issues/2
       if (startVal && /^\d+$/.test(startVal)) {
         searchParams.set('start', startVal);

@@ -2,11 +2,16 @@
 
 Tracked upstream in [issue #2](https://github.com/jshute96/GoogleDocsDiffRange/issues/2).
 
-**Status: off by default in the extension.** We are attempting a different
-workaround, so the inference / dance code is skipped unless
-`drEnableMissingStartWorkaround(true)` is called. The tests still enable it
-explicitly to keep coverage of the code paths, since we can re-enable the
-workaround if the bug resurfaces.
+**Status: the polarity-fix path is the default workaround.** When the
+interceptor sees a no-`start` URL with a pending capture, it sets
+`drPendingPolarityFix` and the content script toggles "Highlight changes"
+once. Under either polarity, *one* of the two checkbox states produces a
+`start+end` URL; the toggle's refetch carries the start the capture needs.
+
+**Legacy infer-start workaround** (paths A/B/C + the dance) is still in the
+code, gated on `drEnableMissingStartWorkaround`. It's off by default but
+kept for the missing-start spec's coverage and as a fallback if the
+polarity-fix approach falls short.
 
 ## The bug
 
@@ -37,7 +42,27 @@ Google Docs sometimes fires a `showrevision` request without a `start` parameter
 - Tab reload resets polarity to normal.
 - A second slow-diff trigger flips polarity back to normal (not yet asserted in the no-extension repro; observed empirically).
 
-## The fix: infer the missing `start`
+## The fix (default): polarity-fix toggle
+
+Single mechanism for the entire bug — including session start in inverted polarity:
+
+- **In the interceptor** (`src/background-injected.ts`): if `origStart` is missing while `drCaptureMode` is set (and `drEnableMissingStartWorkaround` is off), set `drPendingPolarityFix='1'` and bail out of the rewrite without consuming capture.
+- **In the content script** (`src/content-revisions.ts`): a `MutationObserver` on `data-dr-pending-polarity-fix` fires `runPolarityFixIfFlagged`, which clicks the "Highlight changes" checkbox once and arms `drToggleRefetchPending`.
+- **Docs auto-refires `showrevision`** ~300ms later. Under both polarities, exactly one checkbox state produces `start+end` URLs, so a single toggle surfaces a usable read.
+- **The follow-up XHR re-enters the capture branch** with `drCaptureMode` and `.dr-pending-capture` still set; capture completes against `origStart, origEnd` and the rewrite branch puts the desired range on the outgoing URL.
+
+Bounded retry: `drPolarityFixTried` is set with the polarity-fix request and cleared on the next successful capture. If the toggle's refetch *also* arrives without `start` (e.g., `drSimulateMissingStart` strips `start` unconditionally), the second pass clears capture state and falls through — the displayed result may be wrong but the page doesn't loop.
+
+### Versions mode rewrite
+
+In Versions mode the rewrite branch always strips `start`, regardless of overrides. Polarity inversion can leave Docs producing `start+end` URLs while we're in Versions mode (checkbox unchecked + inverted polarity = diff URLs); the strip keeps the displayed content consistent with the user's selected mode.
+
+### Coverage
+
+- `testing/no-extension/docs-version-fallback-bug.spec.ts` reproduces the bug + polarity XOR without the extension, using `armOneShotShowRevisionDelay` to make one diff fetch slow.
+- `testing/extension/version-range-slow-diff.spec.ts` triggers the same bug under the extension and asserts that subsequent click-driven captures recover via the polarity-fix path, plus that Versions mode keeps stripping `start` across the polarity flip.
+
+## The legacy fix: infer the missing `start`
 
 Each version in the list corresponds to a revision range `[start_N, end_N]`. The ranges are chronologically adjacent and non-overlapping, so `start_N = end_{N+1} + 1`. Docs still sends `end` reliably even when it drops `start`. That's all we need.
 

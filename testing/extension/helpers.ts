@@ -91,7 +91,15 @@ async function waitForCaptureSettled(page: Page, timeoutMs = 3000): Promise<void
       // rewrite log before it's been written. Set by content-revisions
       // before toggling, cleared by the interceptor when the first rewrite
       // completes.
-      !document.body.dataset.drToggleRefetchPending,
+      !document.body.dataset.drToggleRefetchPending &&
+      // The polarity-fix handshake (issue #2 default workaround): the
+      // interceptor sets this flag when it sees a no-start URL with a
+      // pending capture; the content-script observer toggles Highlight
+      // changes (which sets drToggleRefetchPending) and clears this flag.
+      // Between the flag being set and the observer task firing, the other
+      // gates are all briefly clear — without this guard a poll could
+      // return "settled" mid-handshake.
+      !document.body.dataset.drPendingPolarityFix,
     null,
     { timeout: timeoutMs }
   );

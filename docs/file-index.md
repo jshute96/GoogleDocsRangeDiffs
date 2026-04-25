@@ -57,6 +57,8 @@ One-line descriptions of every source file, grouped by directory.
 | `testing/extension/version-range-missing-start.spec.ts` | Behavioral tests: missing-start showrevision workaround (issue #2) |
 | `testing/extension/version-range-expand-arrow.spec.ts` | Behavioral tests: expand/collapse arrow — range pinning, round-trip, divergent collapse |
 | `testing/extension/version-range-versions-mode.spec.ts` | Behavioral tests: Diffs|Versions toggle, per-row button visibility, single-version content |
+| `testing/extension/version-range-slow-diff.spec.ts` | Behavioral tests: extension survives Docs slow-diff polarity-flip via the polarity-fix path |
+| `testing/network-injection.ts` | Shared helper: arms a one-shot delay on the next `/showrevision` with `start=` (used by extension + no-extension specs to reproduce the slow-diff bug) |
 | `testing/no-extension/playwright.config.ts` | Playwright config for live tests without extension |
 | `testing/no-extension/fixtures.ts` | Worker-scoped fixtures: CDP context + shared `page` with VH open |
 | `testing/no-extension/helpers.ts` | Helpers for no-extension tests: showrevision capture, one-shot delay injection, checkbox toggling |

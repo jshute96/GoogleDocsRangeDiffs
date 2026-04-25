@@ -921,6 +921,34 @@
     new MutationObserver(() => {
       runMissingStartDanceIfFlagged();
     }).observe(document.body, { attributes: true, attributeFilter: ['data-dr-missing-start-dance'] });
+
+    // Attribute observer for the polarity-fix handshake. The interceptor
+    // sets body.dataset.drPendingPolarityFix when it sees a no-start URL
+    // with a pending capture (and the legacy workaround is off). Toggle
+    // the Highlight-changes checkbox once: under either polarity, *one*
+    // checkbox state produces `start+end` URLs, so one toggle surfaces
+    // a usable read. The follow-up showrevision goes through the
+    // interceptor with drCaptureMode still armed, completing the capture.
+    new MutationObserver(() => {
+      runPolarityFixIfFlagged();
+    }).observe(document.body, { attributes: true, attributeFilter: ['data-dr-pending-polarity-fix'] });
+  }
+
+  // Polarity-fix handler — see the observer above. Runs as a microtask
+  // after the XHR.open that set the flag.
+  function runPolarityFixIfFlagged(): void {
+    if (!document.body.dataset.drPendingPolarityFix) return;
+    delete document.body.dataset.drPendingPolarityFix;
+    const checkbox = findHighlightChangesCheckbox();
+    if (!checkbox) {
+      console.log('[DiffRange] polarity fix: Highlight changes checkbox not found');
+      return;
+    }
+    // drToggleRefetchPending: gates waitForCaptureSettled so tests don't
+    // read state before the resulting refetch lands.
+    document.body.dataset.drToggleRefetchPending = '1';
+    checkbox.click();
+    console.log('[DiffRange] polarity fix: toggled Highlight changes (now ' + (checkbox.checked ? 'checked' : 'unchecked') + ')');
   }
 
   // Missing-start workaround (issue #2): when Docs fires a showrevision
