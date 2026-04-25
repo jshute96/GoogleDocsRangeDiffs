@@ -7,13 +7,20 @@
 // Usage:
 //   scripts/make-doc-with-versions.mjs --ports 9222,9223 \
 //       [--name "Version history test"] [--delay 30] [--count 10] \
-//       [--share_to alice@example.com,bob@example.com]
+//       [--share_to alice@example.com,bob@example.com] \
+//       [--doc https://docs.google.com/document/d/<id>/edit]
 //
 // Point --ports at browsers that are logged in as different Google accounts
 // to produce a multi-user version history: the first browser creates the
 // doc, then shares it with the signed-in account of each additional
 // browser (auto-detected from the "You need access" page), and each edit
 // is attributed to the account on the browser that made it.
+//
+// --doc takes the URL of an existing doc to continue appending versions to,
+// rather than creating a new one. It cannot be combined with --name (the
+// existing doc keeps its current title). Sharing with other browsers and
+// extra --share_to recipients still applies, in case the doc is not yet
+// shared with them.
 //
 // --delay controls the gap between successive edits. Google Docs collapses
 // rapid edits by the same user into a single version, and also collapses
@@ -35,12 +42,13 @@ import { chromium } from "playwright";
 import { parseArgs } from "node:util";
 
 const USAGE = `Usage: scripts/make-doc-with-versions.mjs --ports P[,P...]
-       [--name NAME] [--delay SECONDS] [--count N]
+       [--name NAME | --doc URL] [--delay SECONDS] [--count N]
        [--share_to EMAIL[,EMAIL...]]`;
 
 const { values } = parseArgs({
   options: {
-    name:      { type: "string", default: "Version history test" },
+    name:      { type: "string" },
+    doc:       { type: "string" },
     ports:     { type: "string" },
     delay:     { type: "string", default: "30" },
     count:     { type: "string", default: "10" },
@@ -58,8 +66,14 @@ if (!values.ports) {
   console.error(USAGE);
   process.exit(1);
 }
+if (values.doc && values.name) {
+  console.error("Error: --doc and --name cannot be combined (--doc keeps the existing doc's title)");
+  console.error(USAGE);
+  process.exit(1);
+}
 
-const name  = values.name;
+const existingDocUrl = values.doc;
+const name  = values.name ?? "Version history test";
 const ports = values.ports.split(",").map(s => Number(s.trim())).filter(Boolean);
 const delay = Number(values.delay);
 const count = Number(values.count);
@@ -70,6 +84,10 @@ const extraShareEmails = (values.share_to ?? "")
 
 if (ports.length < 1) {
   console.error("--ports must list at least one port");
+  process.exit(1);
+}
+if (existingDocUrl && !/\/document\/d\//.test(existingDocUrl)) {
+  console.error("Error: --doc must be a Google Docs URL (containing /document/d/<id>/)");
   process.exit(1);
 }
 
@@ -196,28 +214,43 @@ for (const port of ports) {
   }
 }
 
-// 2-5. In the first browser: open a new doc, rename it, write counter=0.
+// 2-5. In the first browser: either create a new doc (rename it, write
+// counter=0) or open the existing doc passed via --doc.
 const first = ctxs[0];
 const firstPage = await first.newPage();
 let docUrl;
-try {
-  await firstPage.goto("https://docs.new");
-  // docs.new redirects to /document/d/<id>/edit once the doc is created.
-  // If the user is not logged in we land on an accounts page instead, and
-  // this wait times out — treat that as a creation failure.
-  await firstPage.waitForURL(/\/document\/d\//, { timeout: 60_000 });
-  await waitForEditor(firstPage);
-  await setDocTitle(firstPage, name);
-  docUrl = firstPage.url();
-} catch (e) {
-  fail(`Failed to create new doc on port ${ports[0]} (landed at ${firstPage.url()})`, e);
-}
-
 let counter = 0;
-try {
-  await replaceContent(firstPage, `counter ${counter}`);
-} catch (e) {
-  fail(`Failed to write initial content on port ${ports[0]}`, e);
+if (existingDocUrl) {
+  try {
+    const result = await openOrNeedsAccess(firstPage, existingDocUrl);
+    if (result.state !== "open") {
+      fail(`First browser on port ${ports[0]} does not have access to ${existingDocUrl}` +
+           (result.email ? ` (signed in as ${result.email})` : ""));
+    }
+    await waitForEditor(firstPage);
+    docUrl = firstPage.url();
+  } catch (e) {
+    fail(`Failed to open existing doc on port ${ports[0]} (landed at ${firstPage.url()})`, e);
+  }
+} else {
+  try {
+    await firstPage.goto("https://docs.new");
+    // docs.new redirects to /document/d/<id>/edit once the doc is created.
+    // If the user is not logged in we land on an accounts page instead, and
+    // this wait times out — treat that as a creation failure.
+    await firstPage.waitForURL(/\/document\/d\//, { timeout: 60_000 });
+    await waitForEditor(firstPage);
+    await setDocTitle(firstPage, name);
+    docUrl = firstPage.url();
+  } catch (e) {
+    fail(`Failed to create new doc on port ${ports[0]} (landed at ${firstPage.url()})`, e);
+  }
+
+  try {
+    await replaceContent(firstPage, `counter ${counter}`);
+  } catch (e) {
+    fail(`Failed to write initial content on port ${ports[0]}`, e);
+  }
 }
 
 console.log(`Doc URL: ${docUrl}`);

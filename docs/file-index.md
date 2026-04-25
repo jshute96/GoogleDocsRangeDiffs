@@ -39,7 +39,7 @@ One-line descriptions of every source file, grouped by directory.
 | `scripts/open-browser-without-extension.sh` | Opens Playwright Chromium without extension, persistent profile |
 | `scripts/inspect-revision-history.mjs` | Connects to running browsers via CDP, takes screenshots, dumps extension DOM |
 | `scripts/display-browser-ports.sh` | Opens a labeled tab in each running Chrome to show its `--remote-debugging-port` |
-| `scripts/make-doc-with-versions.mjs` | Creates a new Google Doc via docs.new and drives multiple CDP browsers to generate version history |
+| `scripts/make-doc-with-versions.mjs` | Creates a new Google Doc (or continues one via `--doc`) and drives multiple CDP browsers to generate version history |
 
 ## Tests (`testing/`)
 
