@@ -104,7 +104,7 @@ npm run build                # build
 npm test                     # all tests (extension + no-extension in parallel)
 npm run test:extension       # only tests with the extension loaded
 npm run test:no-extension    # only tests without the extension (baseline)
-npm run test:extension -- tests/extensions/smoke.spec.ts     # run one test file
+npm run test:extension -- testing/extension/smoke.spec.ts    # run one test file
 ```
 
 #### Debugging in Chrome developer console
@@ -132,3 +132,7 @@ Tests connect to these browsers via Chrome DevTools Protocol.
 - `testing/` — Playwright test suites (extension and no-extension)
 - `docs/` — design docs
 - `docs/file-index.md` — description of all files in the project
+
+## Privacy policy
+
+See [`docs/privacy-policy.md`](docs/privacy-policy.md) — the extension does not collect, store, or transmit any data.
