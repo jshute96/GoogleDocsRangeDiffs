@@ -28,8 +28,9 @@ The working approach:
 
 - Open Chrome manually (not via Playwright API) using our shell scripts
 - Log in to Google interactively (Google doesn't block manual login)
-- The shell scripts enable `--remote-debugging-port` (9222 for
-  extension, 9223 for no-extension)
+- The shell scripts enable `--remote-debugging-port` (9222 for the
+  with-extension profile, 9223 for the no-extension profile used in
+  manual testing)
 - Playwright connects to the running browser via `chromium.connectOverCDP()`
 - Since Playwright is attaching to an already-authenticated session
   (not launching a new one), Google doesn't re-check or invalidate it
@@ -45,6 +46,12 @@ persistent profiles so login survives across runs.
 |--------|-------------|------------|------------|
 | `open-browser-with-extension.sh` | `.chrome-extension-profile/` | 9222 | Yes (`dist/`) |
 | `open-browser-without-extension.sh` | `.chrome-no-extension-profile/` | 9223 | No |
+
+Automated tests use **only** the with-extension browser (port 9222).
+The no-extension fixture connects to that browser too and disables the
+extension via the chrome://extensions enable toggle for the duration of
+the suite. The no-extension script and profile are kept around for
+manual baseline testing.
 
 Both scripts:
 - Use Playwright's Chromium binary from `~/.cache/ms-playwright/`
@@ -69,26 +76,45 @@ via CDP ports and:
 
 ### Playwright test suites
 
-Two separate suites under `testing/`, each with their own Playwright
-config so they can run in parallel:
+Two suites under `testing/`, run from a single shared config
+(`testing/playwright.config.ts`) as Playwright projects:
 
-- `testing/extension/` — tests with the extension loaded
-- `testing/no-extension/` — baseline tests without the extension
+- `extension` — tests with the extension loaded (`testing/extension/`)
+- `no-extension` — baseline tests without the extension (`testing/no-extension/`)
 
 Run with:
 ```bash
-npm test                     # both in parallel
-npm run test:extension       # extension only
-npm run test:no-extension    # no-extension only
+npm test                                       # both projects, sequential
+npm test -- --project extension                # extension only
+npm test -- --project no-extension             # no-extension only
+npm test -- testing/extension/smoke.spec.ts    # one file
 ```
+
+The projects share the same browser. The config keeps them sequential
+and re-runs worker setup at each project boundary:
+
+- `workers: 1` keeps the projects from running in parallel — otherwise
+  one project would toggle the extension on while the other was
+  mid-test.
+- Crossing a project boundary tears down and re-initializes worker
+  fixtures (a Playwright nuance — the worker process may be reused but
+  fixtures aren't), which is why the per-project `configureExtension`
+  call actually runs every time.
+- `configureExtension(ctx, { enabled, reload })` is a no-op for the
+  toggle when already in the right state — the common case for
+  repeated single-project runs.
 
 ### Extension-suite structure
 
 - `testing/extension/helpers.ts` — reusable pieces: `openDocAndVersionHistory`,
   `getRangeState`, `expectRange`, `clickFrom` / `clickTo` / `clickListitem`,
   `switchDropdown`, `exitVersionHistory` / `reenterVersionHistory`,
-  `resetRange`, `captureRangeDiffsLogs`, `reloadExtension`,
-  `parseShowRevisionBody`, `extractDiffContents`.
+  `resetRange`, `captureRangeDiffsLogs`, `parseShowRevisionBody`,
+  `extractDiffContents`.
+- `testing/chrome-extensions.ts` — drives the chrome://extensions page;
+  `configureExtension(ctx, { enabled, reload })` flips the extension's
+  enable toggle and (optionally) clicks the dev-mode reload button in a
+  single chrome://extensions visit.
 - `testing/extension/version-range-*.spec.ts` — behavioral suite for the
   extension's range UI, split into focused files so `-g` / per-file runs
   exercise smaller slices:
@@ -126,8 +152,9 @@ npm run test:no-extension    # no-extension only
   item[0] selected and From/To collapsed on it.
 - The extension is reloaded exactly once per worker inside the
   `_sharedPage` fixture (so `pretest`'s fresh `dist/` is picked up).
-  `reloadExtension` opens a transient `chrome://extensions` tab — the
-  one per-worker window-raise we accept. Don't add a `beforeEach` reload.
+  `configureExtension` opens a transient `chrome://extensions` tab —
+  the one per-worker window-raise we accept. Don't add a `beforeEach`
+  reload.
 - We don't close the shared page at teardown — it's the user's
   interactive browser tab.
 
@@ -159,12 +186,13 @@ npm run test:no-extension    # no-extension only
   option fires `resetRevisionOverrides` and arms init-capture, even
   though the list isn't replaced — the selected item's highlights
   clear and then reappear via the next auto-fired showrevision.
-- **`reloadExtension` uses Chrome-private shadow-DOM selectors.**
+- **`configureExtension` uses Chrome-private shadow-DOM selectors.**
   `extensions-manager`, `extensions-toolbar`, `#devMode`,
-  `extensions-item`, `#dev-reload-button` live inside shadow roots
-  that Chrome can rename in any release. If reload fails after a
-  Chrome upgrade, update the selectors in `helpers.ts`. The helper
-  also matches the extension by its manifest `name`.
+  `extensions-item`, `#enableToggle`, `#dev-reload-button` live inside
+  shadow roots that Chrome can rename in any release. If toggle/reload
+  fails after a Chrome upgrade, update the selectors in
+  `testing/chrome-extensions.ts`. The helper matches the extension by
+  its manifest `name` (currently "Google Docs Range Diffs").
 - **Log-consuming tests use the shared `logs` fixture.** Its console
   listener is attached before the shared page navigates, so no per-test
   setup is needed — just read `logs.all()`. `captureRangeDiffsLogs` is
@@ -219,11 +247,27 @@ manual reproduction.
 
 The fixtures in `testing/extension/fixtures.ts` and
 `testing/no-extension/fixtures.ts` use `connectOverCDP` to attach
-to the running browsers. The test workflow:
+to the running browser. Both suites point at the with-extension
+browser (port 9222). The test workflow:
 
-1. Open browsers with the shell scripts
+1. Open the with-extension browser with `open-browser-with-extension.sh`
+   (or let the fixture auto-launch — see below)
 2. Log in to Google (once — sessions persist across runs)
-3. Run `npm test` (connects to the running browsers)
+3. Run `npm test` (connects to the running browser)
+
+### Auto-launch on missing CDP
+
+`connectOverCDPWithGuidance(port, script, { launchIfMissing: true })`
+spawns the launch script detached and polls CDP until the browser is
+ready (30s cap). Both fixtures opt in: if port 9222 isn't answering,
+`scripts/open-browser-with-extension.sh` is launched and connection
+retries until Chromium is up. The browser is left running so
+subsequent test runs reuse the same window. Fresh profiles still need
+an interactive Google login — auto-launch only handles the "I forgot
+to start the browser" case.
+
+`pretest` rebuilds `dist/` so the launched browser always sees a
+current build.
 
 ## What the extension injects
 

@@ -1,9 +1,10 @@
 /**
  * Playwright fixtures for live Google Docs tests WITHOUT the extension.
  *
- * Connects to a running browser via CDP (port 9223) that was opened with
- * scripts/open-browser-without-extension.sh. The browser must be running
- * and logged in to Google before tests start.
+ * Shares the with-extension browser (CDP port 9222) and disables the
+ * extension via the chrome://extensions enable toggle for the duration of
+ * this suite. One profile, one login — `npm test` runs the suites
+ * sequentially so the two never fight over the toggle.
  *
  * Worker-scoped `_sharedContext` / `_sharedPage` share one tab across tests
  * in a worker — cuts runtime and avoids raising the browser window. The
@@ -11,7 +12,8 @@
  */
 
 import { test as base, type BrowserContext, type Page } from '@playwright/test';
-import { CDP_PORT_NO_EXTENSION, connectOverCDPWithGuidance, getTestConfig } from '../test-env';
+import { CDP_PORT_EXTENSION, connectOverCDPWithGuidance, getTestConfig } from '../test-env';
+import { configureExtension } from '../chrome-extensions';
 
 type TestFixtures = {
   context: BrowserContext;
@@ -29,12 +31,18 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   _sharedContext: [
     async ({}, use) => {
       const browser = await connectOverCDPWithGuidance(
-        CDP_PORT_NO_EXTENSION,
-        'open-browser-without-extension.sh'
+        CDP_PORT_EXTENSION,
+        'open-browser-with-extension.sh',
+        { launchIfMissing: true }
       );
       const ctx = browser.contexts()[0];
       if (!ctx) throw new Error('No browser context found — is the browser open?');
+      // Make sure the extension is OFF for this suite. No-op if already off.
+      await configureExtension(ctx, { enabled: false });
       await use(ctx);
+      // Don't re-enable on teardown: the next suite's fixture will flip it
+      // back on, and leaving it off if no further suite runs matches what
+      // the user just asked for.
     },
     { scope: 'worker' },
   ],
@@ -60,6 +68,9 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         return u === 'about:blank' || u === '' || u.startsWith(origin);
       });
       const page = reusable ?? (await _sharedContext.newPage());
+      // Always navigate fresh: if we inherited a tab the prior suite left on
+      // the doc, its in-page state still reflects extension-on. A full goto
+      // gives us a clean Docs load with the (now-disabled) extension absent.
       await page.goto(testDocUrl, { waitUntil: 'domcontentloaded' });
       // Docs never reaches networkidle; settle via an explicit wait.
       await page.waitForTimeout(4000);

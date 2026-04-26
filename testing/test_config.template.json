@@ -1,0 +1,16 @@
+{
+  "instructions": [
+    "Copy this from `test_config.template.json` to `test_config.json`.",
+    "Add a link to a google doc in `test_doc`.",
+    "",
+    "The tests require logging in to a Google account with Editor access",
+    "on this doc.",
+    "",
+    "Editor permission is required to see history. The tests do not write",
+    "to the doc.",
+    "",
+    "The document needs to have at least 10 versions visible when you open",
+    "its Version history."
+  ],
+  "test_doc": "<link a doc here>"
+}

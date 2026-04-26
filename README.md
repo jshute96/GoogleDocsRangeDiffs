@@ -84,27 +84,41 @@ Tests run against real Google Docs with a logged-in user.
 
 #### Test setup
 
+The tests interact with live Google Docs using the extension.
+This requires you to log in, and to provide a test document with some
+version history where you have Editor access. (Editor access is required to
+see the history, but the tests don't make any edits.)
+
 1. Install Playwright
    ```bash
    npx playwright install chromium
    ```
-2. Open browsers and log in to Google (sessions persist across runs):
+2. Create `testing/test_config.json` from the template and point
+   `test_doc` at a Google Doc.
+   ```bash
+   cp testing/test_config.template.json testing/test_config.json
+   # Then edit test_config.json and set test_doc.
+   ```
+3. Open the test browser and log in to Google once (the session
+   persists across runs in the profile dir):
    ```bash
    scripts/open-browser-with-extension.sh https://docs.google.com
-   scripts/open-browser-without-extension.sh https://docs.google.com
    ```
-3. Keep the browsers open — tests connect to them via CDP.
+
+The automated tests use this browser. Its log-in state persists across
+restarts. Some tests enable or disable the extension as needed.
+
+For manual testing, `scripts/open-browser-without-extension.sh` will
+open a parallel browser *without* the extension.
 
 #### Running tests
 
-With both browsers open and logged in:
-
 ```bash
-npm run build                # build
-npm test                     # all tests (extension + no-extension in parallel)
-npm run test:extension       # only tests with the extension loaded
-npm run test:no-extension    # only tests without the extension (baseline)
-npm run test:extension -- testing/extension/smoke.spec.ts    # run one test file
+npm run build                                # build
+npm test                                     # all tests
+npm test -- --project extension              # only the extension suite
+npm test -- --project no-extension           # only the no-extension suite
+npm test -- testing/extension/smoke.spec.ts  # one test file
 ```
 
 #### Debugging in Chrome developer console
@@ -122,7 +136,7 @@ scripts/open-browser-without-extension.sh [url]   # Playwright Chromium, no exte
 ```
 
 Both use persistent profiles so Google login survives across runs.
-Tests connect to these browsers via Chrome DevTools Protocol.
+Automated tests use the with-extension browser; the other script is for manual baseline testing.
 
 ### Code layout
 

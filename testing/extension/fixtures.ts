@@ -14,11 +14,11 @@
 
 import { test as base, type BrowserContext, type Page, type Worker } from '@playwright/test';
 import { CDP_PORT_EXTENSION, connectOverCDPWithGuidance, getTestConfig } from '../test-env';
+import { configureExtension } from '../chrome-extensions';
 import {
   findReusableTab,
   openDocAndVersionHistory,
   parseShowRevisionBody,
-  reloadExtension,
   type DiffResponseBuf,
   type DiffResponseEntry,
 } from './helpers';
@@ -57,7 +57,8 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     async ({}, use) => {
       const browser = await connectOverCDPWithGuidance(
         CDP_PORT_EXTENSION,
-        'open-browser-with-extension.sh'
+        'open-browser-with-extension.sh',
+        { launchIfMissing: true }
       );
       const ctx = browser.contexts()[0];
       if (!ctx) throw new Error('No browser context found — is the browser open?');
@@ -106,10 +107,12 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 
   _sharedPage: [
     async ({ _sharedContext, testDocUrl }, use) => {
-      // Reload the extension exactly once per worker so it picks up a
-      // freshly built dist/ from `pretest`. This opens chrome://extensions
-      // in a temporary tab — the one per-worker window-raise we tolerate.
-      await reloadExtension(_sharedContext);
+      // Make sure the extension is enabled (the no-extension suite shares
+      // this browser and may have left it off) and reload it so it picks
+      // up the freshly-built dist/ from `pretest`. Both happen in one
+      // chrome://extensions visit — the one per-worker window-raise we
+      // tolerate (CDP's `Target.createTarget` raises the OS window).
+      await configureExtension(_sharedContext, { enabled: true, reload: true });
       // Reuse an existing tab if one looks disposable (about:blank or
       // already on Docs) — `newPage` raises the OS window because CDP's
       // `Target.createTarget` activates the new tab. We only steal a tab

@@ -44,8 +44,10 @@ One-line descriptions of every source file, grouped by directory.
 
 | File | Description |
 |------|-------------|
-| `testing/test-env.ts` | Shared test env: paths, CDP port constants, test config loader |
-| `testing/extension/playwright.config.ts` | Playwright config for live tests with extension |
+| `testing/test-env.ts` | Shared test env: paths, CDP port constant, test config loader, CDP connect-or-launch helper |
+| `testing/test_config.template.json` | Template for `test_config.json` — copy to set up `test_doc` for the test suite |
+| `testing/playwright.config.ts` | Unified Playwright config — defines `extension` and `no-extension` projects, runs sequentially |
+| `testing/chrome-extensions.ts` | Drives chrome://extensions: `configureExtension(ctx, { enabled, reload })` for both fixtures |
 | `testing/extension/fixtures.ts` | Worker-scoped fixtures: CDP context, shared `page` with VH open, `logs`, `diffResponses` buffers |
 | `testing/extension/smoke.spec.ts` | Smoke test: verifies extension UI is injected into the shared VH page |
 | `testing/extension/helpers.ts` | Extension test helpers: doc/VH setup, range-state reads, click actions, showrevision parser, capture-settled polling |
@@ -57,8 +59,7 @@ One-line descriptions of every source file, grouped by directory.
 | `testing/extension/version-range-versions-mode.spec.ts` | Behavioral tests: Diffs|Versions toggle, per-row button visibility, single-version content |
 | `testing/extension/version-range-slow-diff.spec.ts` | Behavioral tests: extension survives Docs slow-diff polarity-flip via the polarity-fix path |
 | `testing/network-injection.ts` | Shared helper: arms a one-shot delay on the next `/showrevision` with `start=` (used by extension + no-extension specs to reproduce the slow-diff bug) |
-| `testing/no-extension/playwright.config.ts` | Playwright config for live tests without extension |
-| `testing/no-extension/fixtures.ts` | Worker-scoped fixtures: CDP context + shared `page` with VH open |
+| `testing/no-extension/fixtures.ts` | Worker-scoped fixtures: CDP context + shared `page` with VH open; disables the extension via the chrome://extensions toggle |
 | `testing/no-extension/helpers.ts` | Helpers for no-extension tests: showrevision capture, one-shot delay injection, checkbox toggling |
 | `testing/no-extension/smoke.spec.ts` | Smoke test: opens a Google Doc without extension as baseline |
 | `testing/no-extension/docs-version-fallback-bug.spec.ts` | Reproduction of Docs slow-diff version-fallback bug + Highlight-changes XOR polarity |
