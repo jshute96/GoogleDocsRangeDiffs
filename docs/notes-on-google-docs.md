@@ -551,7 +551,7 @@ the entire history:
   (`applyStickyFromOneIfFlagged` in `injectVersionButtons`).
 - "End here" preserves the state — the range becomes `1..clickedEnd`,
   From-highlight keeps following the oldest visible row.
-- "Start here", "Diff here", any direct version selection (mousedown on
+- "Start here", "Diff", any direct version selection (mousedown on
   body / label / expand arrow), mode toggles, dropdown switches, and VH
   re-entry all clear the flag.
 

@@ -58,7 +58,7 @@ function revisionInterceptorFunc(): void {
     if (fromItem === toItem) {
       const bothBtn = fromItem.querySelector('.dr-version-both-btn');
       bothBtn?.classList.add('dr-btn-shown');
-      // Mirror content-revisions.ts: Diffs-mode From=To lights the Diff-here
+      // Mirror content-revisions.ts: Diffs-mode From=To lights the Diff
       // button. Versions mode applies dr-btn-shown without dr-btn-highlighted,
       // rendering the same button as an unlit affordance.
       bothBtn?.classList.add('dr-btn-highlighted');

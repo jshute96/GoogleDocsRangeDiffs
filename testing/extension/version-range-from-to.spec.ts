@@ -5,7 +5,7 @@
  *
  * Covers moving the start endpoint, moving the end endpoint inward,
  * collapsing a range via a plain listitem click, per-row button
- * visibility under a distinct range, the single-button "Diff here"
+ * visibility under a distinct range, the single-button "Diff"
  * state when From=To, and the URL rewrite that happens when inputs
  * disagree with Docs' natural click-generated params.
  */
@@ -177,15 +177,15 @@ async function readButtonVisibility(
   });
 }
 
-test('From=To (init state): Diff-here is the only visible button on the endpoint', async ({ page }) => {
+test('From=To (init state): Diff is the only visible button on the endpoint', async ({ page }) => {
   // Init capture lands From=To on item 0. That row should display ONLY the
-  // "Diff here" button; "Start here" and "End here" are hidden there since
+  // "Diff" button; "Start here" and "End here" are hidden there since
   // clicking either on the single-point endpoint would be a no-op.
   const vis = await readButtonVisibility(page);
   expect(vis[0], 'item 0 (From=To endpoint)').toEqual({ start: false, end: false, diff: true });
   // Every other row is "below" the single-point range (older) — only
   // "Start here" makes sense (extends the range downward). "End here" and
-  // "Diff here" are hidden.
+  // "Diff" are hidden.
   for (let i = 1; i < vis.length; i++) {
     expect(vis[i], `item ${i} (below single-point range)`).toEqual({ start: true, end: false, diff: false });
   }
@@ -212,19 +212,19 @@ test('Distinct range: endpoints hide the opposite button, in-between shows both,
   for (let i = 4; i < vis.length; i++) {
     expect(vis[i], `item ${i} (below range)`).toEqual({ start: true, end: false, diff: false });
   }
-  // Diff-here is hidden on every row while the range is distinct.
-  expect(vis.every((v) => !v.diff), 'no Diff-here on distinct range').toBe(true);
+  // The Diff button is hidden on every row while the range is distinct.
+  expect(vis.every((v) => !v.diff), 'no Diff button on distinct range').toBe(true);
 });
 
-test('Diff-here follows From=To as it moves: click a new item, Diff shows there', async ({ page }) => {
+test('Diff button follows From=To as it moves: click a new item, Diff shows there', async ({ page }) => {
   // Start state: From=To=0. clickListitem(2) sets From=To=2 via the
-  // listitem mousedown 'both' capture. Diff-here should migrate to item 2.
+  // listitem mousedown 'both' capture. The Diff button should migrate to item 2.
   await clickListitem(page, 2);
   const vis = await readButtonVisibility(page);
   expect(vis[2], 'new From=To endpoint').toEqual({ start: false, end: false, diff: true });
-  // No other row has Diff-here visible.
+  // No other row has the Diff button visible.
   for (let i = 0; i < vis.length; i++) {
     if (i === 2) continue;
-    expect(vis[i].diff, `item ${i} has no Diff-here`).toBe(false);
+    expect(vis[i].diff, `item ${i} has no Diff button`).toBe(false);
   }
 });

@@ -40,12 +40,12 @@
         '.dr-version-button.dr-btn-in-between:not(.dr-btn-highlighted) { background:#aecbfa; color:#1967d2; border-color:#8ab4f8; }' +
         '.dr-version-button.dr-btn-highlighted { background:#1a73e8; color:#fff; border-color:#1a73e8; }' +
         '.dr-version-button.dr-btn-hidden { display:none; }' +
-        // The "Diff here" button is the single-button state shown only on
+        // The "Diff" button is the single-button state shown only on
         // the endpoint when From=To (Diffs mode) or on the selected version
         // (Versions mode). Default hidden via CSS so it's baseline-off even
         // across class resets; .dr-btn-shown reveals it. The lit (solid blue)
         // styling comes from .dr-btn-highlighted (the standard rule already
-        // applies to .dr-version-button.dr-btn-highlighted), so a Diff-here
+        // applies to .dr-version-button.dr-btn-highlighted), so a Diff button
         // shown without the highlight class renders as the default white
         // button — that's the Versions-mode "available action" appearance.
         '.dr-version-both-btn { display:none; }' +
@@ -175,7 +175,7 @@
 
       row.appendChild(makeBtn('Start here', 'from'));
       row.appendChild(makeBtn('End here', 'to'));
-      row.appendChild(makeBtn('Diff here', 'both'));
+      row.appendChild(makeBtn('Diff', 'both'));
 
       item.appendChild(row);
 
@@ -434,8 +434,8 @@
 
   // Apply per-row button visibility for Versions mode. Pivot is whichever
   // listitem currently wears SelectedTile:
-  //   - Selected: hide Start + End, show Diff (unlit — Diff-here is an
-  //     available-action affordance, not active state, so no .dr-btn-highlighted).
+  //   - Selected: hide Start + End, show Diff (unlit — the Diff button is
+  //     an available-action affordance, not active state, so no .dr-btn-highlighted).
   //   - Above (newer than selected, lower index): show End only — clicking
   //     it sets To=this and lifts us into a Diffs-mode range bounded above.
   //   - Below (older, higher index): show Start only — sets From=this.
@@ -482,9 +482,9 @@
   //     make sense from that row's position: above the range hides
   //     "Start here"; below hides "End here"; at an endpoint, the opposite
   //     button is hidden (clicking it would just collapse the range).
-  //   - .dr-btn-shown (on the "Diff here" button, default-hidden via CSS):
+  //   - .dr-btn-shown (on the "Diff" button, default-hidden via CSS):
   //     revealed only on the single item where From=To — replaces the
-  //     Start/End pair with a single "Diff here" indicator on that row.
+  //     Start/End pair with a single "Diff" indicator on that row.
   function updateInBetweenHighlights(): void {
     const stale = document.querySelectorAll('.dr-btn-in-between, .dr-btn-hidden, .dr-btn-shown');
     for (let i = 0; i < stale.length; i++) {
@@ -522,9 +522,10 @@
     if (fromItem === toItem) {
       const bothBtn = fromItem.querySelector('.dr-version-both-btn');
       bothBtn?.classList.add('dr-btn-shown');
-      // Diffs-mode From=To: Diff-here represents the active range, so light
-      // it up. Versions mode also shows this button (via applyVersionsModeButtons)
-      // but without .dr-btn-highlighted, rendering it as the unlit affordance.
+      // Diffs-mode From=To: the Diff button represents the active range, so
+      // light it up. Versions mode also shows this button (via
+      // applyVersionsModeButtons) but without .dr-btn-highlighted, rendering
+      // it as the unlit affordance.
       bothBtn?.classList.add('dr-btn-highlighted');
     }
   }
@@ -557,15 +558,6 @@
     const row = document.createElement('div');
     row.className = 'dr-full-history-row';
 
-    const btn = document.createElement('button');
-    btn.textContent = 'Diff full history';
-    btn.className = 'dr-version-button dr-full-history-btn';
-    btn.addEventListener('click', (e: Event) => {
-      e.stopPropagation();
-      void handleFullHistoryClick();
-    });
-    row.appendChild(btn);
-
     const modeWrap = document.createElement('div');
     modeWrap.className = 'dr-mode-toggle';
     const diffsBtn = document.createElement('button');
@@ -585,6 +577,15 @@
     modeWrap.appendChild(diffsBtn);
     modeWrap.appendChild(versionsBtn);
     row.appendChild(modeWrap);
+
+    const btn = document.createElement('button');
+    btn.textContent = 'Diff full history';
+    btn.className = 'dr-version-button dr-full-history-btn';
+    btn.addEventListener('click', (e: Event) => {
+      e.stopPropagation();
+      void handleFullHistoryClick();
+    });
+    row.appendChild(btn);
 
     header.appendChild(row);
 
@@ -663,7 +664,7 @@
   // Enter Diffs mode: re-check Highlight changes so Docs fires showrevision
   // with start+end for the selected revision, and arm capture so the
   // resulting URL's range becomes both bounds (From=To on selected, with
-  // Diff-here lit). We arm capture inline on the SelectedTile rather than
+  // the Diff button lit). We arm capture inline on the SelectedTile rather than
   // via drInitCapture, because armBothOnSelected re-resolves SelectedTile at
   // XHR.open() time — Docs occasionally re-renders listitems between the
   // click and the XHR, which can leave a transient window where no element
