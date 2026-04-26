@@ -160,7 +160,7 @@ Automated tests use the with-extension browser; the other script is for manual b
 
 To cut a GitHub release:
 
-1. Bump the `version` field in **both** `package.json` and `src/manifest.json` to the same value, and commit.
+1. Bump the `version` field in **both** `package.json` and `src/manifest.json` to the same value, then commit and push to `main`.
 2. Run the release script from a clean `main`:
    ```bash
    scripts/release.sh             # creates a draft release (default)
@@ -168,7 +168,7 @@ To cut a GitHub release:
    ```
 
 The script:
-- Verifies `package.json` and `src/manifest.json` versions match.
+- Verifies clean `main` branch, matching versions in `package.json` and `src/manifest.json`, and an unused `vX.Y.Z` tag.
 - Builds and zips the extension to `/tmp/GoogleDocsRangeDiffs-vX.Y.Z.zip`.
 - Creates and pushes an annotated `vX.Y.Z` tag.
 - Runs `gh release create` with the zip attached and notes auto-generated from merged PRs.

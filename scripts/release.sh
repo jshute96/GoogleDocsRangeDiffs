@@ -3,8 +3,9 @@
 # Cut a GitHub release for the extension.
 #
 # Steps, in order:
+#   0. Verify gh is installed + authenticated.
 #   1. Verify versions in package.json and src/manifest.json match.
-#   2. Verify the working tree is clean and we're on main.
+#   2. Verify the working tree is clean and we're on main, in sync with origin/main.
 #   3. Verify the tag doesn't already exist locally or on the remote.
 #   4. Build + zip via scripts/zip_extension.sh --release VERSION
 #      -> /tmp/GoogleDocsRangeDiffs-vVERSION.zip.
@@ -14,9 +15,8 @@
 #      GitHub UI. Pass --publish to skip the draft step.
 #
 # Note: the tag is pushed before the release is created, so if step 6
-# fails (auth, network) the pushed tag is orphaned. Delete it with
-#   git push --delete origin vX.Y.Z && git tag -d vX.Y.Z
-# and retry.
+# fails (auth, network) the pushed tag is orphaned. The script prints
+# the cleanup command on failure (see the trap below).
 #
 # Usage:
 #   scripts/release.sh             # creates a draft release (default)
@@ -43,14 +43,20 @@ EOF
 }
 
 DRAFT_FLAG="--draft"
-case "${1:-}" in
-  "")          ;;
-  --publish)   DRAFT_FLAG="" ;;
-  -h|--help)   usage; exit 0 ;;
-  *)           echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
-esac
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --publish)   DRAFT_FLAG=""; shift ;;
+    -h|--help)   usage; exit 0 ;;
+    *)           echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
 
 cd "$(dirname "$0")/.."
+
+# 0. Verify gh is installed + authenticated. Doing this first means we
+# fail before pushing a tag that we can't follow up with a release for.
+command -v gh >/dev/null 2>&1 || { echo "gh CLI not found. Install from https://cli.github.com/."; exit 1; }
+gh auth status >/dev/null 2>&1 || { echo "gh not authenticated. Run 'gh auth login' first."; exit 1; }
 
 # 1. Verify versions match.
 PKG_VERSION=$(node -p "require('./package.json').version")
@@ -68,7 +74,7 @@ VERSION="$PKG_VERSION"
 TAG="v$VERSION"
 echo "Releasing $TAG"
 
-# 2. Verify clean tree on main.
+# 2. Verify clean tree on main, in sync with origin/main.
 if [[ -n "$(git status --porcelain)" ]]; then
   echo "Working tree is not clean. Commit or stash changes first."
   git status --short
@@ -78,6 +84,15 @@ fi
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 if [[ "$BRANCH" != "main" ]]; then
   echo "Not on main (on $BRANCH). Switch to main before releasing."
+  exit 1
+fi
+
+git fetch origin main --quiet
+LOCAL=$(git rev-parse main)
+REMOTE=$(git rev-parse origin/main)
+if [[ "$LOCAL" != "$REMOTE" ]]; then
+  echo "Local main ($LOCAL) does not match origin/main ($REMOTE)."
+  echo "Pull or push so they match before releasing."
   exit 1
 fi
 
@@ -96,15 +111,25 @@ bash scripts/zip_extension.sh --release "$VERSION"
 ZIP="/tmp/GoogleDocsRangeDiffs-v${VERSION}.zip"
 [[ -f "$ZIP" ]] || { echo "Expected zip at $ZIP, not found."; exit 1; }
 
-# 5. Tag + push.
-git tag -a "$TAG" -m "$TAG"
+# 5. Tag + push. Once the tag is on the remote, any subsequent failure
+# leaves an orphaned tag, so install a trap that prints the cleanup
+# command. Cleared on success below.
+orphaned_tag_hint() {
+  echo
+  echo "Release failed after the tag was pushed. To clean up and retry:"
+  echo "  git push --delete origin $TAG && git tag -d $TAG"
+}
+git tag -a "$TAG" -m "Release $TAG"
 git push origin "$TAG"
+trap orphaned_tag_hint ERR
 
 # 6. Create the GitHub release.
 gh release create "$TAG" "$ZIP" \
   --title "$TAG" \
   --generate-notes \
   $DRAFT_FLAG
+
+trap - ERR
 
 echo
 if [[ -n "$DRAFT_FLAG" ]]; then

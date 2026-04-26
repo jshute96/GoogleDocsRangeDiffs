@@ -25,19 +25,21 @@ EOF
 }
 
 VERSION=""
-case "${1:-}" in
-  "")          ;;
-  --release)
-    if [[ -z "${2:-}" ]]; then
-      echo "--release requires a VERSION argument" >&2
-      usage >&2
-      exit 2
-    fi
-    VERSION="$2"
-    ;;
-  -h|--help)   usage; exit 0 ;;
-  *)           echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
-esac
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --release)
+      if [[ -z "${2:-}" || "$2" == -* ]]; then
+        echo "--release requires a VERSION argument" >&2
+        usage >&2
+        exit 2
+      fi
+      VERSION="$2"
+      shift 2
+      ;;
+    -h|--help)   usage; exit 0 ;;
+    *)           echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
 
 cd "$(dirname "$0")/.."
 
