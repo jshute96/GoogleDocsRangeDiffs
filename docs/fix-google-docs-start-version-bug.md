@@ -1,6 +1,6 @@
 # Fix for Google Docs missing-`start` bug
 
-Tracked upstream in [issue #2](https://github.com/jshute96/GoogleDocsDiffRange/issues/2).
+Tracked upstream in [issue #2](https://github.com/jshute96/GoogleDocsRangeDiffs/issues/2).
 
 **Status: polarity-fix toggle is the active workaround.** Earlier we shipped an inference/"dance" approach gated behind `drEnableMissingStartWorkaround`; that code has been removed. See "What we removed" below for what we tried and why we replaced it.
 

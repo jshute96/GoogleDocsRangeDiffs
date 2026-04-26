@@ -4,7 +4,7 @@
 
 set -e
 
-TARGET="/tmp/GoogleDocsDiffRange.zip"
+TARGET="/tmp/GoogleDocsRangeDiffs.zip"
 
 [[ -d "dist/" ]] || (echo "dist/ not found" && exit 1)
 

@@ -24,8 +24,8 @@ import {
 } from './helpers';
 
 /** Accessor for the shared console-log buffer. */
-export interface DiffRangeLogBuffer {
-  /** Snapshot of all `[DiffRange]` lines captured so far. */
+export interface RangeDiffsLogBuffer {
+  /** Snapshot of all `[RangeDiffs]` lines captured so far. */
   all(): string[];
   /** Discard the buffer; use in `beforeEach` so each test sees only its own logs. */
   clear(): void;
@@ -46,8 +46,8 @@ type WorkerFixtures = {
   getServiceWorker: () => Promise<Worker>;
   /** The test doc URL from test_config.json. */
   testDocUrl: string;
-  /** Shared [DiffRange] console-log buffer. */
-  logs: DiffRangeLogBuffer;
+  /** Shared [RangeDiffs] console-log buffer. */
+  logs: RangeDiffsLogBuffer;
   /** Shared buffer of parsed `showrevision` responses, newest last. */
   diffResponses: DiffResponseBuf;
 };
@@ -128,7 +128,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       const buf: string[] = [];
       _sharedPage.on('console', (msg) => {
         const t = msg.text();
-        if (t.includes('[DiffRange]')) buf.push(t);
+        if (t.includes('[RangeDiffs]')) buf.push(t);
       });
       await use({
         all: () => buf.slice(),

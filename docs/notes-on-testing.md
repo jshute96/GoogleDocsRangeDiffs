@@ -1,6 +1,6 @@
 # Notes on Testing
 
-Working notes on the testing setup for the GoogleDocsDiffRange extension.
+Working notes on the testing setup for the GoogleDocsRangeDiffs extension.
 Covers what works, what doesn't, and how the pieces fit together.
 
 ## The core challenge: Google login
@@ -87,7 +87,7 @@ npm run test:no-extension    # no-extension only
 - `testing/extension/helpers.ts` — reusable pieces: `openDocAndVersionHistory`,
   `getRangeState`, `expectRange`, `clickFrom` / `clickTo` / `clickListitem`,
   `switchDropdown`, `exitVersionHistory` / `reenterVersionHistory`,
-  `resetRange`, `captureDiffRangeLogs`, `reloadExtension`,
+  `resetRange`, `captureRangeDiffsLogs`, `reloadExtension`,
   `parseShowRevisionBody`, `extractDiffContents`.
 - `testing/extension/version-range-*.spec.ts` — behavioral suite for the
   extension's range UI, split into focused files so `-g` / per-file runs
@@ -119,7 +119,7 @@ npm run test:no-extension    # no-extension only
   reuses `_sharedContext.pages()[0]` — an existing tab — instead of
   `newPage()`. CDP's `Target.createTarget` activates the new tab and
   raises the OS window; reusing an existing tab keeps it quiet.
-- `logs` is a `[DiffRange]` console buffer attached to the shared page.
+- `logs` is a `[RangeDiffs]` console buffer attached to the shared page.
   Tests call `logs.all()` to read; `beforeEach` calls `logs.clear()`.
 - `beforeEach` calls `resetRange(page)` — exits version history if open
   and re-enters, which retriggers init-capture so each test starts with
@@ -167,7 +167,7 @@ npm run test:no-extension    # no-extension only
   also matches the extension by its manifest `name`.
 - **Log-consuming tests use the shared `logs` fixture.** Its console
   listener is attached before the shared page navigates, so no per-test
-  setup is needed — just read `logs.all()`. `captureDiffRangeLogs` is
+  setup is needed — just read `logs.all()`. `captureRangeDiffsLogs` is
   still exported for ad-hoc scripts that create their own page.
 - **Test doc must have ≥ 4 versions.** The suite assumes at least
   four history items to exercise older/newer combinations. Documented

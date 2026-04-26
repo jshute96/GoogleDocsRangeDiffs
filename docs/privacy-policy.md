@@ -28,4 +28,4 @@ provide its in-page features on Google Docs:
 ## Contact
 
 Questions or concerns: file an issue at
-<https://github.com/jshute96/GoogleDocsDiffRange/issues>.
+<https://github.com/jshute96/GoogleDocsRangeDiffs/issues>.

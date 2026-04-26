@@ -116,7 +116,7 @@ function revisionInterceptorFunc(): void {
     // selected mode, but the divergence is worth logging at info level
     // for diagnosis.
     if (origStartStr && document.body?.dataset.drMode === 'versions') {
-      console.log('[DiffRange] Versions mode: incoming URL had start=' + origStartStr + ' (likely polarity inversion); will strip on rewrite');
+      console.log('[RangeDiffs] Versions mode: incoming URL had start=' + origStartStr + ' (likely polarity inversion); will strip on rewrite');
     }
 
     // Cache each showrevision's `start`/`end` onto whichever listitem is
@@ -188,7 +188,7 @@ function revisionInterceptorFunc(): void {
       const oe = origEndStr ?? '?';
       const capMode = document.body?.dataset.drCaptureMode;
       const modeSuffix = capMode ? ' (mode=' + capMode + ')' : '';
-      console.log('[DiffRange] orig request' + flagSuffix + ': ' + os + ' to ' + oe + modeSuffix);
+      console.log('[RangeDiffs] orig request' + flagSuffix + ': ' + os + ' to ' + oe + modeSuffix);
     }
 
     // Capture mode: when the user clicked "Start here" or "End here" on a
@@ -231,14 +231,14 @@ function revisionInterceptorFunc(): void {
         origEnd !== null && curStartPeek < origEnd;
       if (origStart === null && origEnd !== null && !toModeDoesntNeedStart) {
         if (document.body?.dataset.drPolarityFixTried) {
-          console.warn('[DiffRange] polarity fix: still no start after retry — giving up');
+          console.warn('[RangeDiffs] polarity fix: still no start after retry — giving up');
           delete document.body.dataset.drPolarityFixTried;
           delete document.body.dataset.drCaptureMode;
           document.querySelector('.dr-pending-capture')?.classList.remove('dr-pending-capture');
           // Fall through into the capture block's second half (benign no-op
           // for origStart=null) and on to the rewrite branch.
         } else {
-          console.log('[DiffRange] polarity fix: end=' + origEnd + ', no start — scheduling Highlight-changes toggle (mode=' + captureMode + ')');
+          console.log('[RangeDiffs] polarity fix: end=' + origEnd + ', no start — scheduling Highlight-changes toggle (mode=' + captureMode + ')');
           document.body.dataset.drPolarityFixTried = '1';
           document.body.dataset.drPendingPolarityFix = '1';
           return url;
@@ -369,7 +369,7 @@ function revisionInterceptorFunc(): void {
       // synchronously in armIfChromecoverAdded — has a chance to capture.
       if (wasInitCapture && captureMode === 'both' && origStart === null) {
         document.body.dataset.drInitCapture = '1';
-        console.log('[DiffRange] init-capture re-armed (no start on init XHR; awaiting follow-up)');
+        console.log('[RangeDiffs] init-capture re-armed (no start on init XHR; awaiting follow-up)');
       }
     }
 
@@ -392,14 +392,14 @@ function revisionInterceptorFunc(): void {
       const newStart = searchParams.get('start');
       const newEnd = searchParams.get('end');
       if (origStartStr !== newStart || origEndStr !== newEnd) {
-        console.log('[DiffRange] rewrote to: ' + (newStart ?? 'undefined') + ' to ' + (newEnd ?? 'undefined'));
+        console.log('[RangeDiffs] rewrote to: ' + (newStart ?? 'undefined') + ' to ' + (newEnd ?? 'undefined'));
       }
       url = base + '?' + searchParams.toString();
     } else if (startVal || endVal) {
       // Diffs mode: apply overrides if any — including when Docs omitted
       // the param from the original URL (see issue #2: Docs sometimes drops
       // `start` on large docs, sticky in its polarity until polarity flips).
-      // https://github.com/jshute96/GoogleDocsDiffRange/issues/2
+      // https://github.com/jshute96/GoogleDocsRangeDiffs/issues/2
       if (startVal && /^\d+$/.test(startVal)) {
         searchParams.set('start', startVal);
       }
@@ -411,7 +411,7 @@ function revisionInterceptorFunc(): void {
       const newEnd = searchParams.get('end');
 
       if (origStartStr !== newStart || origEndStr !== newEnd) {
-        console.log('[DiffRange] rewrote to: ' + (newStart ?? 'undefined') + ' to ' + (newEnd ?? 'undefined'));
+        console.log('[RangeDiffs] rewrote to: ' + (newStart ?? 'undefined') + ' to ' + (newEnd ?? 'undefined'));
       }
 
       url = base + '?' + searchParams.toString();
@@ -494,7 +494,7 @@ function revisionInterceptorFunc(): void {
     const iframe = document.querySelector('.docs-texteventtarget-iframe') as HTMLIFrameElement | null;
     const target = iframe && (iframe.contentDocument || iframe.contentWindow?.document);
     if (!target) {
-      console.log('[DiffRange] openVersionHistory: text event iframe not found');
+      console.log('[RangeDiffs] openVersionHistory: text event iframe not found');
       return false;
     }
 
@@ -503,7 +503,7 @@ function revisionInterceptorFunc(): void {
       ctrlKey: true, altKey: true, shiftKey: true,
       bubbles: true, cancelable: true
     }));
-    console.log('[DiffRange] openVersionHistory: dispatched Ctrl+Alt+Shift+H');
+    console.log('[RangeDiffs] openVersionHistory: dispatched Ctrl+Alt+Shift+H');
     return true;
   }
   window.openVersionHistory = openVersionHistory;
@@ -529,18 +529,18 @@ function revisionInterceptorFunc(): void {
       } else {
         first.click();
       }
-      console.log('[DiffRange] showRevisions(' + start + ', ' + end + '): triggered via listitem click');
+      console.log('[RangeDiffs] showRevisions(' + start + ', ' + end + '): triggered via listitem click');
       return;
     }
 
     // Version History not open — open it. The initial load triggers a
     // showrevision fetch which the interceptor will rewrite.
     if (openVersionHistory()) {
-      console.log('[DiffRange] showRevisions(' + start + ', ' + end + '): opening Version History');
+      console.log('[RangeDiffs] showRevisions(' + start + ', ' + end + '): opening Version History');
     } else {
-      console.log('[DiffRange] showRevisions(' + start + ', ' + end + '): overrides set. Open Version History manually (Ctrl+Alt+Shift+H).');
+      console.log('[RangeDiffs] showRevisions(' + start + ', ' + end + '): overrides set. Open Version History manually (Ctrl+Alt+Shift+H).');
     }
   };
 
-  console.log('[DiffRange] revision interceptor installed (showRevisions(), openVersionHistory() available)');
+  console.log('[RangeDiffs] revision interceptor installed (showRevisions(), openVersionHistory() available)');
 }

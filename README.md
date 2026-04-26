@@ -56,8 +56,8 @@ The extension also includes some additional UI improvements.
 
 1. Clone this repo and install dependencies:
    ```bash
-   git clone https://github.com/jshute96/GoogleDocsDiffRange.git
-   cd GoogleDocsDiffRange
+   git clone https://github.com/jshute96/GoogleDocsRangeDiffs.git
+   cd GoogleDocsRangeDiffs
    npm install
    ```
 2. Build the extension:

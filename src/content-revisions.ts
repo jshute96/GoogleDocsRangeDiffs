@@ -717,12 +717,12 @@
   function handleFullHistoryClick(): void {
     const maxRevStr = document.body.dataset.drMaxRev;
     if (!maxRevStr) {
-      console.log('[DiffRange] Diff full history: max revision unknown');
+      console.log('[RangeDiffs] Diff full history: max revision unknown');
       return;
     }
     const maxRev = parseInt(maxRevStr, 10);
     if (!Number.isFinite(maxRev) || maxRev < 1) {
-      console.log('[DiffRange] Diff full history: invalid max revision ' + maxRevStr);
+      console.log('[RangeDiffs] Diff full history: invalid max revision ' + maxRevStr);
       return;
     }
 
@@ -747,7 +747,7 @@
     updateInBetweenHighlights();
 
     setDatasetOverrides(1, maxRev);
-    console.log('[DiffRange] Diff full history: overrides set to 1:' + maxRev);
+    console.log('[RangeDiffs] Diff full history: overrides set to 1:' + maxRev);
 
     // Diff full history puts From on the oldest item and To on the newest —
     // a divergent range, not From=To on the selected item. Clear the
@@ -819,7 +819,7 @@
     // and snap back to Diffs mode (the default).
     document.body.dataset.drMode = 'diffs';
     updateModeButtons();
-    console.log('[DiffRange] revision overrides reset');
+    console.log('[RangeDiffs] revision overrides reset');
   }
 
   // Listen for clicks on the version type dropdown options. Picking any
@@ -1009,14 +1009,14 @@
     delete document.body.dataset.drPendingPolarityFix;
     const checkbox = findHighlightChangesCheckbox();
     if (!checkbox) {
-      console.log('[DiffRange] polarity fix: Highlight changes checkbox not found');
+      console.log('[RangeDiffs] polarity fix: Highlight changes checkbox not found');
       return;
     }
     // drToggleRefetchPending: gates waitForCaptureSettled so tests don't
     // read state before the resulting refetch lands.
     document.body.dataset.drToggleRefetchPending = '1';
     checkbox.click();
-    console.log('[DiffRange] polarity fix: toggled Highlight changes (now ' + (checkbox.checked ? 'checked' : 'unchecked') + ')');
+    console.log('[RangeDiffs] polarity fix: toggled Highlight changes (now ' + (checkbox.checked ? 'checked' : 'unchecked') + ')');
   }
 
   // Detect entry into version history view — Docs attaches the revisions
@@ -1058,9 +1058,9 @@
           const checkbox = findHighlightChangesCheckbox();
           if (checkbox && !checkbox.checked) {
             checkbox.click();
-            console.log('[DiffRange] version history entry: re-checked stale Highlight changes');
+            console.log('[RangeDiffs] version history entry: re-checked stale Highlight changes');
           }
-          console.log('[DiffRange] version history entry detected — init capture armed');
+          console.log('[RangeDiffs] version history entry detected — init capture armed');
           return;
         }
       }
@@ -1076,5 +1076,5 @@
     chrome.runtime.sendMessage({ type: 'injectRevisionInterceptor' });
   } catch (_e) { /* extension context may not be available */ }
 
-  console.log('[DiffRange] extension active');
+  console.log('[RangeDiffs] extension active');
 })();

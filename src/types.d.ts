@@ -1,4 +1,4 @@
-// Global type declarations for the GoogleDocsDiffRange extension.
+// Global type declarations for the GoogleDocsRangeDiffs extension.
 
 // Window properties injected by the MAIN world interceptor.
 interface Window {

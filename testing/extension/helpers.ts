@@ -373,21 +373,21 @@ export async function switchDropdown(page: Page, label: string): Promise<void> {
 }
 
 /**
- * Start capturing [DiffRange] console messages from the page. Returns an
+ * Start capturing [RangeDiffs] console messages from the page. Returns an
  * accessor that reads the buffered log lines at the time of the call.
  * Attach before navigating / acting.
  */
-export function captureDiffRangeLogs(page: Page): () => string[] {
+export function captureRangeDiffsLogs(page: Page): () => string[] {
   const buf: string[] = [];
   page.on('console', (msg) => {
     const t = msg.text();
-    if (t.includes('[DiffRange]')) buf.push(t);
+    if (t.includes('[RangeDiffs]')) buf.push(t);
   });
   return () => buf.slice();
 }
 
 /**
- * Parse "[DiffRange] rewrote to: N to M" lines from a log buffer and return
+ * Parse "[RangeDiffs] rewrote to: N to M" lines from a log buffer and return
  * the latest rewritten {start, end}, or null if none seen.
  */
 export function lastRewroteRange(logs: string[]): { start: number; end: number } | null {

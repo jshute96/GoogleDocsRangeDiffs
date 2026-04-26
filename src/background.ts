@@ -1,4 +1,4 @@
-// Background service worker for the GoogleDocsDiffRange extension.
+// Background service worker for the GoogleDocsRangeDiffs extension.
 //
 // Handles messages from the content script and injects MAIN world
 // functions into Google Docs pages. Loads injected functions from
@@ -6,7 +6,7 @@
 importScripts('background-injected.js');
 
 chrome.action.onClicked.addListener(() => {
-  chrome.tabs.create({ url: 'https://github.com/jshute96/GoogleDocsDiffRange/blob/main/README.md' });
+  chrome.tabs.create({ url: 'https://github.com/jshute96/GoogleDocsRangeDiffs/blob/main/README.md' });
 });
 
 chrome.runtime.onMessage.addListener((msg: { type: string }, sender: chrome.runtime.MessageSender) => {
@@ -19,7 +19,7 @@ chrome.runtime.onMessage.addListener((msg: { type: string }, sender: chrome.runt
       func: revisionInterceptorFunc,
       world: 'MAIN'
     }).catch((err: Error) => {
-      console.warn('[DiffRange] injectRevisionInterceptor failed for tab', tabId, ':', err.message);
+      console.warn('[RangeDiffs] injectRevisionInterceptor failed for tab', tabId, ':', err.message);
     });
   }
 });

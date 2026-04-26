@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Open a browser with the GoogleDocsDiffRange extension loaded.
+# Open a browser with the GoogleDocsRangeDiffs extension loaded.
 # Uses Playwright's bundled Chromium (system Chrome dropped --load-extension).
 #
 # The browser uses a persistent profile so Google login sessions survive
