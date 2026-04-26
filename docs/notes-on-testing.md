@@ -76,18 +76,24 @@ via CDP ports and:
 
 ### Playwright test suites
 
-Two suites under `testing/`, run from a single shared config
-(`testing/playwright.config.ts`) as Playwright projects:
+All specs live in `testing/tests/`, run from a single shared config
+(`testing/playwright.config.ts`) split into two Playwright projects by
+filename:
 
-- `extension` — tests with the extension loaded (`testing/extension/`)
-- `no-extension` — baseline tests without the extension (`testing/no-extension/`)
+- `extension` — every spec **except** `no-extension-*.spec.ts`
+- `no-extension` — `no-extension-*.spec.ts` (baseline-only tests)
+
+Fixtures and helpers sit at the `testing/` root, suffixed by suite:
+`fixtures-extension.ts`, `fixtures-no-extension.ts`,
+`helpers-extension.ts`, `helpers-no-extension.ts`. Each spec imports
+the right pair.
 
 Run with:
 ```bash
 npm test                                       # both projects, sequential
 npm test -- --project extension                # extension only
 npm test -- --project no-extension             # no-extension only
-npm test -- testing/extension/smoke.spec.ts    # one file
+npm test -- testing/tests/smoke.spec.ts        # one file
 ```
 
 The projects share the same browser. The config keeps them sequential
@@ -106,16 +112,17 @@ and re-runs worker setup at each project boundary:
 
 ### Extension-suite structure
 
-- `testing/extension/helpers.ts` — reusable pieces: `openDocAndVersionHistory`,
-  `getRangeState`, `expectRange`, `clickFrom` / `clickTo` / `clickListitem`,
-  `switchDropdown`, `exitVersionHistory` / `reenterVersionHistory`,
-  `resetRange`, `captureRangeDiffsLogs`, `parseShowRevisionBody`,
+- `testing/helpers-extension.ts` — reusable pieces:
+  `openDocAndVersionHistory`, `getRangeState`, `expectRange`,
+  `clickFrom` / `clickTo` / `clickListitem`, `switchDropdown`,
+  `exitVersionHistory` / `reenterVersionHistory`, `resetRange`,
+  `captureRangeDiffsLogs`, `parseShowRevisionBody`,
   `extractDiffContents`.
 - `testing/chrome-extensions.ts` — drives the chrome://extensions page;
   `configureExtension(ctx, { enabled, reload })` flips the extension's
   enable toggle and (optionally) clicks the dev-mode reload button in a
   single chrome://extensions visit.
-- `testing/extension/version-range-*.spec.ts` — behavioral suite for the
+- `testing/tests/version-range-*.spec.ts` — behavioral suite for the
   extension's range UI, split into focused files so `-g` / per-file runs
   exercise smaller slices:
   - `version-range-basic.spec.ts` — initial entry, content-chain sweep,
@@ -127,20 +134,21 @@ and re-runs worker setup at each project boundary:
   - `version-range-slow-diff.spec.ts` — Docs slow-diff polarity-flip
     bug (issue #2): triggers via injected delay, asserts polarity-fix
     recovery.
-- `testing/extension/version-range-shared.ts` — scaffolding shared by
-  those specs: per-file `VersionRecorder`, the `beforeEach` registrar,
-  and a `registerContentChainSweep` helper that registers the sweep as
-  a test in each file that needs it (each file's module state is
+- `testing/version-range-shared.ts` — scaffolding shared by those
+  specs: per-file `VersionRecorder`, the `beforeEach` registrar, and
+  a `registerContentChainSweep` helper that registers the sweep as a
+  test in each file that needs it (each file's module state is
   isolated, so files that compare diff contents re-run the sweep up
   front; files that only check range/UI skip it).
 
 ### Shared page / once-per-worker fixtures
 
-- `fixtures.ts` defines **worker-scoped** private fixtures
-  `_sharedContext`, `_sharedPage`, and `logs`. The built-in test-scoped
-  `context` / `page` are overridden to pipe through, so tests still
-  destructure `{ page, logs }` as usual. Playwright refuses to re-scope
-  built-ins, hence the private names.
+- `fixtures-extension.ts` and `fixtures-no-extension.ts` define
+  **worker-scoped** private fixtures `_sharedContext`, `_sharedPage`,
+  (extension also `logs`). The built-in test-scoped `context` /
+  `page` are overridden to pipe through, so tests still destructure
+  `{ page, logs }` as usual. Playwright refuses to re-scope built-ins,
+  hence the private names.
 - `_sharedPage` opens the doc + version history once per worker and
   reuses `_sharedContext.pages()[0]` — an existing tab — instead of
   `newPage()`. CDP's `Target.createTarget` activates the new tab and
@@ -205,10 +213,11 @@ and re-runs worker setup at each project boundary:
 
 - The main doc area is canvas-rendered in Google Docs, so diff text
   can't be scraped from the DOM. Tests parse the `showrevision` JSON
-  response instead — see `parseShowRevisionBody` in `helpers.ts`.
-- `fixtures.ts` exposes a `diffResponses` worker-scoped fixture that
-  listens to every `showrevision` response and stores its reconstructed
-  `{ before, after }` text keyed by revision range.
+  response instead — see `parseShowRevisionBody` in
+  `helpers-extension.ts`.
+- `fixtures-extension.ts` exposes a `diffResponses` worker-scoped
+  fixture that listens to every `showrevision` response and stores
+  its reconstructed `{ before, after }` text keyed by revision range.
 - `extractDiffContents(page, diffResponses)` reads the current
   `body.dataset.drOverrideStart/End` and returns the latest matching
   parsed response — call it *after* a capture-flow-settled click.
@@ -245,8 +254,8 @@ manual reproduction.
 
 ### Test fixtures
 
-The fixtures in `testing/extension/fixtures.ts` and
-`testing/no-extension/fixtures.ts` use `connectOverCDP` to attach
+The fixtures in `testing/fixtures-extension.ts` and
+`testing/fixtures-no-extension.ts` use `connectOverCDP` to attach
 to the running browser. Both suites point at the with-extension
 browser (port 9222). The test workflow:
 

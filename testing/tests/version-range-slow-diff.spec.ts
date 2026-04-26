@@ -2,7 +2,7 @@
  * Behavioral tests: the extension survives the Docs slow-diff
  * "version-only fallback" bug (issue #2).
  *
- * The no-extension reproduction (testing/no-extension/docs-version-fallback-bug.spec.ts)
+ * The no-extension reproduction (testing/tests/no-extension-docs-version-fallback-bug.spec.ts)
  * documents the failure mode: a single slow `/showrevision` with `start=`
  * flips Docs' internal polarity so that Highlight-changes-checked starts
  * producing no-`start` URLs. Sticky in the polarity it leaves the session in.
@@ -18,17 +18,17 @@
  * clear `drPolarityFixTried`, so each click gets a fresh attempt.
  */
 
-import { test, expect } from './fixtures';
+import { test, expect } from '../fixtures-extension';
 import {
   clickListitem,
   clickModeToggle,
   extractDiffContents,
-} from './helpers';
+} from '../helpers-extension';
 import {
   createRecorder,
   registerBeforeEachReset,
   registerContentChainSweep,
-} from './version-range-shared';
+} from '../version-range-shared';
 import { armOneShotShowRevisionDelay } from '../network-injection';
 
 const recorder = createRecorder();

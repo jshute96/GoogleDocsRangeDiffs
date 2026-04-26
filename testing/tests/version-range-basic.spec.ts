@@ -7,7 +7,7 @@
  * and uses its own recorder.
  */
 
-import { test, expect } from './fixtures';
+import { test, expect } from '../fixtures-extension';
 import {
   getRangeState,
   expectRange,
@@ -16,13 +16,13 @@ import {
   clickFrom,
   clickTo,
   clickDateLabel,
-} from './helpers';
+} from '../helpers-extension';
 import {
   createRecorder,
   registerBeforeEachReset,
   registerContentChainSweep,
   expectRangeAndContents,
-} from './version-range-shared';
+} from '../version-range-shared';
 
 const recorder = createRecorder();
 

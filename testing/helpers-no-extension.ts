@@ -6,12 +6,12 @@
  * Docs-side bugs (e.g., the slow-diff "version-only fallback" bug
  * described in `docs/fix-google-docs-start-version-bug.md`).
  *
- * Anything specific to the extension lives in `testing/extension/helpers.ts`.
+ * Anything specific to the extension lives in `testing/helpers-extension.ts`.
  */
 
 import { type Page } from '@playwright/test';
 
-export { armOneShotShowRevisionDelay } from '../network-injection';
+export { armOneShotShowRevisionDelay } from './network-injection';
 
 /** A captured `/showrevision` response. */
 export interface ShowRevisionResponse {

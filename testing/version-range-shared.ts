@@ -22,7 +22,7 @@
  * anything that depends on it.
  */
 
-import { test, expect } from './fixtures';
+import { test, expect } from './fixtures-extension';
 import {
   getRangeState,
   expectRange,
@@ -31,7 +31,7 @@ import {
   resetRange,
   type DiffContents,
   type DiffResponseBuf,
-} from './helpers';
+} from './helpers-extension';
 import type { Page } from '@playwright/test';
 
 /**

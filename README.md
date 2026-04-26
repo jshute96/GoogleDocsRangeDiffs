@@ -116,9 +116,7 @@ open a parallel browser *without* the extension.
 ```bash
 npm run build                                # build
 npm test                                     # all tests
-npm test -- --project extension              # only the extension suite
-npm test -- --project no-extension           # only the no-extension suite
-npm test -- testing/extension/smoke.spec.ts  # one test file
+npm test -- testing/tests/smoke.spec.ts      # one test file
 ```
 
 #### Debugging in Chrome developer console
@@ -143,7 +141,8 @@ Automated tests use the with-extension browser; the other script is for manual b
 - `src/` — Extension source (TypeScript) and `manifest.json`
 - `dist/` — built extension (gitignored, loaded unpacked into Chrome)
 - `scripts/` — build script, browser-opening scripts, inspection tools
-- `testing/` — Playwright test suites (extension and no-extension)
+- `testing/` — Playwright fixtures, helpers, and config for tests
+- `testing/tests/` — Test cases
 - `docs/` — design docs
 - `docs/file-index.md` — description of all files in the project
 

@@ -12,8 +12,8 @@
  */
 
 import { test as base, type BrowserContext, type Page } from '@playwright/test';
-import { CDP_PORT_EXTENSION, connectOverCDPWithGuidance, getTestConfig } from '../test-env';
-import { configureExtension } from '../chrome-extensions';
+import { CDP_PORT_EXTENSION, connectOverCDPWithGuidance, getTestConfig } from './test-env';
+import { configureExtension } from './chrome-extensions';
 
 type TestFixtures = {
   context: BrowserContext;

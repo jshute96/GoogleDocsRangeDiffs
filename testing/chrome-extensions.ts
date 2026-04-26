@@ -1,9 +1,6 @@
 /**
  * Helpers that drive the chrome://extensions page to manage our extension
  * during tests — used by both the extension and no-extension fixtures.
- *
- * Lives at the testing/ root rather than inside extension/ so the
- * no-extension fixture doesn't have to import from a sibling suite.
  */
 
 import { type BrowserContext, type Page } from '@playwright/test';

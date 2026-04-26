@@ -15,7 +15,7 @@ Google Docs sometimes fires a `showrevision` request without a `start` parameter
 
 ### Trigger
 
-- Reproduced in `testing/no-extension/docs-version-fallback-bug.spec.ts`. The test injects a 5s delay around `XMLHttpRequest.send` / `window.fetch` for the next `showrevision` carrying `start=`, simulating a slow diff fetch for one request.
+- Reproduced in `testing/tests/no-extension-docs-version-fallback-bug.spec.ts`. The test injects a 5s delay around `XMLHttpRequest.send` / `window.fetch` for the next `showrevision` carrying `start=`, simulating a slow diff fetch for one request.
 - After the slow request, Docs auto-fires a follow-up `showrevision` *without* `start=` and renders a single-revision view — even though "Highlight changes" is still visibly checked.
 
 ### Polarity model
@@ -51,8 +51,8 @@ The Diffs|Versions toggle is the user-facing control; Docs' "Highlight changes" 
 
 ## Coverage
 
-- `testing/no-extension/docs-version-fallback-bug.spec.ts` reproduces the bug + polarity XOR without the extension, using `armOneShotShowRevisionDelay` to make one diff fetch slow.
-- `testing/extension/version-range-slow-diff.spec.ts` triggers the same bug under the extension and asserts that subsequent click-driven captures recover via the polarity-fix path, plus that Versions mode keeps stripping `start` across the polarity flip.
+- `testing/tests/no-extension-docs-version-fallback-bug.spec.ts` reproduces the bug + polarity XOR without the extension, using `armOneShotShowRevisionDelay` to make one diff fetch slow.
+- `testing/tests/version-range-slow-diff.spec.ts` triggers the same bug under the extension and asserts that subsequent click-driven captures recover via the polarity-fix path, plus that Versions mode keeps stripping `start` across the polarity flip.
 
 ## What we removed
 

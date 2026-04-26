@@ -4,7 +4,7 @@
  * already open at worker start).
  */
 
-import { test, expect } from './fixtures';
+import { test, expect } from '../fixtures-extension';
 
 test('extension injects revision UI into version history', async ({ page }) => {
   const fromButtons = page.locator('.dr-version-from-btn');

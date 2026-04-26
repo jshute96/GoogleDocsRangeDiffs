@@ -13,15 +13,15 @@
  */
 
 import { test as base, type BrowserContext, type Page, type Worker } from '@playwright/test';
-import { CDP_PORT_EXTENSION, connectOverCDPWithGuidance, getTestConfig } from '../test-env';
-import { configureExtension } from '../chrome-extensions';
+import { CDP_PORT_EXTENSION, connectOverCDPWithGuidance, getTestConfig } from './test-env';
+import { configureExtension } from './chrome-extensions';
 import {
   findReusableTab,
   openDocAndVersionHistory,
   parseShowRevisionBody,
   type DiffResponseBuf,
   type DiffResponseEntry,
-} from './helpers';
+} from './helpers-extension';
 
 /** Accessor for the shared console-log buffer. */
 export interface RangeDiffsLogBuffer {

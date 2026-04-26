@@ -10,7 +10,7 @@
  * "navigation-like action → range re-init" theme.
  */
 
-import { test, expect } from './fixtures';
+import { test, expect } from '../fixtures-extension';
 import {
   getRangeState,
   expectRange,
@@ -22,12 +22,12 @@ import {
   reenterVersionHistory,
   switchDropdown,
   lastRewroteRange,
-} from './helpers';
+} from '../helpers-extension';
 import {
   createRecorder,
   registerBeforeEachReset,
   registerContentChainSweep,
-} from './version-range-shared';
+} from '../version-range-shared';
 
 const recorder = createRecorder();
 

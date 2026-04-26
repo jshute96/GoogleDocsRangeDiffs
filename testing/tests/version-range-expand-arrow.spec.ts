@@ -39,22 +39,22 @@
  *      covers the "divergent range, then arrow pins both bounds" case.
  */
 
-import { test, expect } from './fixtures';
+import { test, expect } from '../fixtures-extension';
 import {
   clickFrom,
   clickListitem,
   extractDiffContents,
   getRangeState,
-} from './helpers';
+} from '../helpers-extension';
 import {
   createRecorder,
   expectDiffContents,
   registerBeforeEachReset,
   registerContentChainSweep,
   type VersionRecorder,
-} from './version-range-shared';
+} from '../version-range-shared';
 import type { Page } from '@playwright/test';
-import type { DiffResponseBuf } from './helpers';
+import type { DiffResponseBuf } from '../helpers-extension';
 
 const recorder = createRecorder();
 

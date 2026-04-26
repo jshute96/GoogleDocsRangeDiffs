@@ -23,7 +23,7 @@ and network requests. Discovered while building the revision diff feature.
 - Clicking it transitions to the normal versions pane.
 - Test helpers handle this by waiting for either the versions list or the
   "See full version history" button, and clicking through if the latter
-  appears. See `ensureVersionsListVisible` in `testing/extension/helpers.ts`.
+  appears. See `ensureVersionsListVisible` in `testing/helpers-extension.ts`.
 - The File → Version history menu is *not* a reliable alternative: jsaction
   filters untrusted events on menu items, so synthetic clicks don't open the
   submenu.
@@ -285,7 +285,7 @@ diff view and the "Total: N edits" counter.
     - If inside a `revdiff_dt:2` range → `before` only.
     - If inside a `revdiff_dt:1` range → `after` only.
     - Otherwise → both sides.
-- The main doc area is **canvas-rendered**, so diff text cannot be read from the DOM. Tests that need the rendered content parse the `showrevision` JSON instead (see `parseShowRevisionBody` in `testing/extension/helpers.ts`).
+- The main doc area is **canvas-rendered**, so diff text cannot be read from the DOM. Tests that need the rendered content parse the `showrevision` JSON instead (see `parseShowRevisionBody` in `testing/helpers-extension.ts`).
 
 ### Gotcha: Missing `start` parameter (issue #2)
 

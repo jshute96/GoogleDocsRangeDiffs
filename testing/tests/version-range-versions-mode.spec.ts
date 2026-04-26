@@ -9,7 +9,7 @@
  * content equals each version's `after` (no `before`).
  */
 
-import { test, expect } from './fixtures';
+import { test, expect } from '../fixtures-extension';
 import {
   expectRange,
   expectOverrides,
@@ -19,13 +19,13 @@ import {
   clickListitem,
   clickFrom,
   extractVersionContents,
-} from './helpers';
+} from '../helpers-extension';
 import {
   createRecorder,
   registerBeforeEachReset,
   registerContentChainSweep,
   expectRangeAndContents,
-} from './version-range-shared';
+} from '../version-range-shared';
 
 const recorder = createRecorder();
 

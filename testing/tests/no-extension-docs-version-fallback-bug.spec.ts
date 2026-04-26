@@ -29,7 +29,7 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
-import { test as fixtureTest } from './fixtures';
+import { test as fixtureTest } from '../fixtures-no-extension';
 import {
   armOneShotShowRevisionDelay,
   captureShowRevisions,
@@ -39,10 +39,10 @@ import {
   waitForShowRevisionMatching,
   type ShowRevisionBuf,
   type ShowRevisionResponse,
-} from './helpers';
+} from '../helpers-no-extension';
 
 // Re-export the fixture-bound `test` so each test in this file shares
-// the worker-scoped page from `./fixtures`.
+// the worker-scoped page from `../fixtures-no-extension`.
 const t = fixtureTest;
 
 function fmt(r: ShowRevisionResponse): string {

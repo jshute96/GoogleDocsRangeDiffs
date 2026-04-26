@@ -3,7 +3,7 @@
  * Confirms extension-specific elements are NOT present.
  */
 
-import { test, expect } from './fixtures';
+import { test, expect } from '../fixtures-no-extension';
 
 test('Google Doc loads and version history has no extension UI', async ({ page }) => {
   await expect(page.locator('.dr-version-from-btn')).toHaveCount(0);

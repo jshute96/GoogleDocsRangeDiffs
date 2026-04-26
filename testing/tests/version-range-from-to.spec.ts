@@ -11,21 +11,21 @@
  */
 
 import type { Page } from '@playwright/test';
-import { test, expect } from './fixtures';
+import { test, expect } from '../fixtures-extension';
 import {
   expectOverrides,
   clickListitem,
   clickFrom,
   clickTo,
   lastRewroteRange,
-} from './helpers';
+} from '../helpers-extension';
 import {
   createRecorder,
   registerBeforeEachReset,
   registerContentChainSweep,
   expectDiffContents,
   expectRangeAndContents,
-} from './version-range-shared';
+} from '../version-range-shared';
 
 const recorder = createRecorder();
 
