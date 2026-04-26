@@ -108,8 +108,7 @@ gh release create "$TAG" "$ZIP" \
 
 echo
 if [[ -n "$DRAFT_FLAG" ]]; then
-  echo "Drafted $TAG. Review and publish at:"
-  gh release view "$TAG" --json url -q .url
+  echo "Drafted $TAG. Review and publish at the URL above."
 else
   echo "Released $TAG"
 fi
