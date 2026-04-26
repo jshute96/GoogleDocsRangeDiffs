@@ -9,14 +9,17 @@ UI for diffs between a range of versions, and some other improvements.
 
 1. Open a Google Doc in Chrome.
 2. Open Version history in one of three ways:
-   - Click the Version history icon (![icon](docs/images/docs-history-default.png)) in the upper right corner.
-     - If there are new changes, it shows ![icon](docs/images/docs-history-with-new.png).
+   - Click the Version history icon ![icon](docs/images/docs-history-default.png) in the upper right corner.
+     - If there are new changes, the icon shows ![icon](docs/images/docs-history-with-new.png).
        This opens a page with a diff of changes since you last opened the doc. Click **See full version history** to get to the full history.
    - Use the menu: **File → Version history → See version history**
    - Use the keyboard shortcut: **Ctrl+Alt+Shift+H**
 3. Now you're in the modified **Version history** view.
 
-### Version history, with the extension
+> [!NOTE]
+> Unfortunately, Version history is only visible in Google Docs if you have Editor access.
+
+### Using Version history
 
 * Use the **Diffs | Versions** control to select mode.
   - **Diffs**: View changes between two versions.
