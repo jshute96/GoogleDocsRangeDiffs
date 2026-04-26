@@ -25,7 +25,7 @@ One-line descriptions of every source file, grouped by directory.
 |------|-------------|
 | `src/manifest.json` | Manifest V3 config: permissions, content scripts, service worker |
 | `src/types.d.ts` | Global type declarations: Window extensions, service worker globals |
-| `src/background.ts` | Service worker — handles `injectRevisionInterceptor` message, loads `background-injected.js` |
+| `src/background.ts` | Service worker — `action.onClicked` opens README; handles `injectRevisionInterceptor` message; loads `background-injected.js` |
 | `src/background-injected.ts` | MAIN world: XHR/fetch interceptor, max-revision tracking, polarity-fix workaround (issue #2), `showRevisions()`, `openVersionHistory()` |
 | `src/content-revisions.ts` | Content script: injects From/To + Diff-full-history buttons, wires selection-capture flow, runs the polarity-fix Highlight-changes toggle |
 

@@ -5,6 +5,10 @@
 // background-injected.js via importScripts.
 importScripts('background-injected.js');
 
+chrome.action.onClicked.addListener(() => {
+  chrome.tabs.create({ url: 'https://github.com/jshute96/GoogleDocsDiffRange/blob/main/README.md' });
+});
+
 chrome.runtime.onMessage.addListener((msg: { type: string }, sender: chrome.runtime.MessageSender) => {
   // From Docs content script: inject the revision interceptor that
   // monkey-patches XHR/fetch to rewrite showrevision start/end params.
