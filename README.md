@@ -1,54 +1,51 @@
-# ![icon](src/icons/icon-48.png) GoogleDocsDiffRange Chrome extension
+# ![icon](src/icons/icon-48.png) Google Docs Range Diffs Chrome extension
 
-This extension adds diff-between-versions functionality to Google Docs.
+This extension improves the version history UI in Google Docs, adding
+UI for diffs between a range of versions, and some other improvements.
 
 ## Usage
 
+### Getting to Version history
+
 1. Open a Google Doc in Chrome.
-2. Open Version History: **File → Version history → See version history**
-   (or press **Ctrl+Alt+Shift+H**).
-3. Each version gets **Start here** / **End here** buttons:
-   - Click **Start here** on an older version to set the start of your range.
-   - Click **End here** on a newer version to set the end.
-   - The diff updates to show changes across the selected range.
-   - Selected endpoints highlight in solid blue; versions between them
-     highlight in light blue.
-4. Click **Diff full history** above the versions list to diff from the
-   first revision to the newest — equivalent to **Start here** on the oldest
-   version and **End here** on the newest in one click.
-5. Use the **Diffs | Versions** toggle next to **Diff full history** to
-   switch between diff view and single-revision view:
-   - **Diffs** (default): the main panel shows the diff for the selected
-     range. From/To/Diff highlights mark the active range.
-   - **Versions**: the main panel shows just the content of the selected
-     revision (no diff annotations). Per-row buttons rearrange to
-     **End here** above the selected revision and **Start here** below;
-     **Diff here** appears on the selected revision as an unlit
-     affordance. Clicking any of those buttons hops back to **Diffs**
-     mode with a range anchored on the previously-selected revision.
-6. Switching the dropdown (e.g., "All versions" → "Named versions") resets
-   the range selection.
-7. Clicking on a version's date/name acts only as selection — it no longer
-   opens the rename text field. To rename a version, use the three-dots
-   menu's **Name this version** / **Rename** item. This fixes some confusing
-   and glitchy behavior where those clicks open a poorly-functioning edit box
-   while also selecting the revision.
-8. Works around a Google Docs bug that breaks version navigation on
-   large docs: Docs sometimes drops the `start` parameter from its
-   revision-diff requests, leaving every version showing the same diff.
-   The extension toggles "Highlight changes" once when it sees a
-   no-`start` URL with a pending capture, which makes Docs send a
-   usable `start+end` URL that the interceptor can complete the
-   capture from. See
-   [`docs/fix-google-docs-start-version-bug.md`](docs/fix-google-docs-start-version-bug.md)
-   for the full polarity model and the polarity-fix design.
+2. Open Version history in one of three ways:
+   - Click the Version history icon (![icon](docs/images/docs-history-default.png)) in the upper right corner.
+     - If there are new changes, it shows ![icon](docs/images/docs-history-with-new.png).
+       This opens a page with a diff of changes since you last opened the doc. Click **See full version history** to get to the full history.
+   - Use the menu: **File → Version history → See version history**
+   - Use the keyboard shortcut: **Ctrl+Alt+Shift+H**
+3. Now you're in the modified **Version history** view.
 
-### Console API
+### Version history, with the extension
 
-From the browser console on a Google Docs page:
+* Use the **Diffs | Versions** control to select mode.
+  - **Diffs**: View changes between two versions.
+  - **Versions**: View the document at a specific version.
 
-- `showRevisions(start, end)` — set a revision range and show the diff
-- `openVersionHistory()` — open the Version History panel programmatically
+* Click a version to view the contents or changes in that version.
+
+* Click **Diff full history** to view the full history as a diff.
+  - This shows the final content as a diff from the initial version
+    (which was either an empty doc or the initially imported snapshot).
+  - For all content added, you can see who added it.
+
+* Select specific ranges:
+  1. Select one version.
+  2. Select **Start here** or **End here** to set a range bound, expanding
+     or shrinking the range.
+  3. You'll see the changes made between the start and end versions.
+
+### Other changes
+
+The extension also includes some additional UI improvements.
+
+* The `Show highlights` checkbox is replaced by the **Diffs | Versions** control, which is more intuitive and reliable.
+* The awkward behavior where clicks on the timestamp open a rename text box is disabled.
+  - Naming versions is still possible using actions in the three-dots menu.
+* Fixes a Google Docs bug that breaks version navigation on large docs.
+  - When loading diffs is slow, Google Docs silently switches into a sticky
+    mode where it overrides `Show highlights` and loads versions instead of diffs.
+  - See [`docs/fix-google-docs-start-version-bug.md`](docs/fix-google-docs-start-version-bug.md) for details.
 
 ## Installation
 
@@ -64,30 +61,30 @@ From the browser console on a Google Docs page:
    ```bash
    npm run build
    ```
-3. In Chrome: open `chrome://extensions`, enable **Developer mode**,
-   click **Load unpacked**, and select the `dist/` directory.
+3. In Chrome:
+   1. Open `chrome://extensions`.
+   2. Enable **Developer mode**.
+   3. Click **Load unpacked** and select the `dist/` directory.
 
-## Development setup
+## Development
 
-```bash
-npm install
-npx playwright install chromium
-```
-
-## Building
+### Building
 
 ```bash
-npm run build        # one-shot build into dist/
-npm run watch        # rebuild on TS changes
+npm install      # one-time setup
+npm run build    # build extension in dist/
 ```
 
-## Testing
+### Testing
 
 Tests run against real Google Docs with a logged-in user.
 
-### Setup
+#### Test setup
 
-1. Build the extension: `npm run build`
+1. Install Playwright
+   ```bash
+   npx playwright install chromium
+   ```
 2. Open browsers and log in to Google (sessions persist across runs):
    ```bash
    scripts/open-browser-with-extension.sh https://docs.google.com
@@ -95,17 +92,25 @@ Tests run against real Google Docs with a logged-in user.
    ```
 3. Keep the browsers open — tests connect to them via CDP.
 
-### Running tests
+#### Running tests
 
 With both browsers open and logged in:
 
 ```bash
+npm run build                # build
 npm test                     # all tests (extension + no-extension in parallel)
 npm run test:extension       # only tests with the extension loaded
 npm run test:no-extension    # only tests without the extension (baseline)
 ```
 
-### Interactive browser scripts
+#### Debugging in Chrome developer console
+
+From the browser console on a Google Docs page:
+
+- `showRevisions(start, end)` — set a revision range and show the diff
+- `openVersionHistory()` — open the Version history panel programmatically
+
+#### Interactive browser scripts
 
 ```bash
 scripts/open-browser-with-extension.sh [url]      # Playwright Chromium + extension (port 9222)
@@ -115,7 +120,7 @@ scripts/open-browser-without-extension.sh [url]   # Playwright Chromium, no exte
 Both use persistent profiles so Google login survives across runs.
 Tests connect to these browsers via Chrome DevTools Protocol.
 
-## Layout
+### Code layout
 
 - `src/` — Extension source (TypeScript) and `manifest.json`
 - `dist/` — built extension (gitignored, loaded unpacked into Chrome)

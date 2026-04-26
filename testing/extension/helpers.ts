@@ -558,7 +558,7 @@ export async function extractVersionContents(
 }
 
 /**
- * Reload the GoogleDocsDiffRange extension via chrome://extensions. Useful
+ * Reload the Google Docs Range Diffs extension via chrome://extensions. Useful
  * at the start of a test run to pick up a freshly built dist/. Enables
  * developer mode first if it's off (the reload button lives inside the
  * card's shadow root, only visible when dev mode is on).
@@ -581,7 +581,7 @@ export async function reloadExtension(context: BrowserContext): Promise<void> {
       const items = itemList?.shadowRoot?.querySelectorAll('extensions-item') || [];
       for (const i of Array.from(items) as HTMLElement[]) {
         const name = i.shadowRoot?.querySelector('#name')?.textContent?.trim();
-        if (name === 'GoogleDocsDiffRange') {
+        if (name === 'Google Docs Range Diffs') {
           const btn = i.shadowRoot?.querySelector('#dev-reload-button') as HTMLElement | null;
           if (btn) { btn.click(); return 'reloaded'; }
           return 'no-reload-button';

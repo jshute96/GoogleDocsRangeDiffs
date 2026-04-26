@@ -8,7 +8,6 @@ One-line descriptions of every source file, grouped by directory.
 |------|-------------|
 | `README.md` | Primary project documentation: setup, usage, commands |
 | `CLAUDE.md` | Guidance for AI agents working in this repository |
-| `TODO.md` | Post-merge tasks: TS conversion, icons, tests, options page |
 | `package.json` | Node project manifest, scripts, devDependencies |
 | `tsconfig.json` | TypeScript compiler config for the extension build |
 | `.gitignore` | Git ignore rules |

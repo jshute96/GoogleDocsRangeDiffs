@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "GoogleDocsDiffRange",
-  "version": "0.1.0",
+  "name": "Google Docs Range Diffs",
+  "version": "1.0.0",
   "description": "Adds diff-between-versions feature to Google Docs",
   "homepage_url": "https://github.com/jshute96/GoogleDocsDiffRange",
   "permissions": ["activeTab", "scripting", "tabs"],
@@ -19,7 +19,7 @@
     }
   ],
   "action": {
-    "default_title": "GoogleDocsDiffRange",
+    "default_title": "Google Docs Range Diffs",
     "default_icon": {
       "16": "icons/icon-16.png",
       "48": "icons/icon-48.png",
