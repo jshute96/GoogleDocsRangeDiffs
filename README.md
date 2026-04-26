@@ -104,6 +104,7 @@ npm run build                # build
 npm test                     # all tests (extension + no-extension in parallel)
 npm run test:extension       # only tests with the extension loaded
 npm run test:no-extension    # only tests without the extension (baseline)
+npm run test:extension -- tests/extensions/smoke.spec.ts     # run one test file
 ```
 
 #### Debugging in Chrome developer console
