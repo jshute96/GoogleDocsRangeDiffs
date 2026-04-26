@@ -146,6 +146,24 @@ Automated tests use the with-extension browser; the other script is for manual b
 - `docs/` — design docs
 - `docs/file-index.md` — description of all files in the project
 
+### Releases
+
+To cut a GitHub release:
+
+1. Bump the `version` field in **both** `package.json` and `src/manifest.json` to the same value, and commit.
+2. Run the release script from a clean `main`:
+   ```bash
+   scripts/release.sh             # creates a draft release (default)
+   scripts/release.sh --publish   # publishes immediately, no draft
+   ```
+
+The script:
+- Verifies `package.json` and `src/manifest.json` versions match.
+- Builds and zips the extension to `/tmp/GoogleDocsRangeDiffs-vX.Y.Z.zip`.
+- Creates and pushes an annotated `vX.Y.Z` tag.
+- Runs `gh release create` with the zip attached and notes auto-generated from merged PRs.
+- Defaults to a draft so you can review and edit the notes in the GitHub UI before publishing.
+
 ## Privacy policy
 
 See [`docs/privacy-policy.md`](docs/privacy-policy.md) — the extension does not collect, store, or transmit any data.

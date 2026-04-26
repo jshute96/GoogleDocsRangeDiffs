@@ -39,6 +39,8 @@ One-line descriptions of every source file, grouped by directory.
 | `scripts/inspect-revision-history.mjs` | Connects to running browsers via CDP, takes screenshots, dumps extension DOM |
 | `scripts/display-browser-ports.sh` | Opens a labeled tab in each running Chrome to show its `--remote-debugging-port` |
 | `scripts/make-doc-with-versions.mjs` | Creates a new Google Doc (or continues one via `--doc`) and drives multiple CDP browsers to generate version history |
+| `scripts/zip_extension.sh` | Builds and zips `dist/` to `/tmp/GoogleDocsRangeDiffs.zip` (or `-vX.Y.Z.zip` with `--release`) |
+| `scripts/release.sh` | Verifies versions, builds, tags, pushes, and creates a GitHub release with the zip |
 
 ## Test Infrastructure (`testing/`)
 
