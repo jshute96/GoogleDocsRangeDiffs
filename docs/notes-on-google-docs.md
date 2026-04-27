@@ -69,6 +69,18 @@ Each `[role="listitem"]` is a Material card (`__primary-action` div) with:
   date/label area targets this textarea.
 - Expand arrow for detailed sub-versions
 
+#### Nested-row class duality
+
+- The rename textarea's outer wrapper uses **two parallel classes** —
+  `appsDocsRevisionsWizSidebarRevisionTitleTextboxContainer` for
+  top-level rows and
+  `appsDocsRevisionsWizSidebarIndentRevisionTitleTextboxContainer` for
+  nested (expanded sub-version) rows.
+- The inner `appsDocsRevisionsWizSidebarRevisionTitleTextbox` class is
+  shared between both.
+- Any CSS that targets one container variant must target the other too,
+  or nested rows visually drift from the parent layout.
+
 ### Selection state
 
 Docs marks which version is currently displayed via class on the listitem:

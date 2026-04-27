@@ -72,8 +72,12 @@
         // That centering puts ~30px of empty space to the left of the
         // textarea, shifting it right and pushing the right edge under
         // our button column. Force flex-start so the textarea hugs the
-        // left edge of the Container instead.
-        '.appsDocsRevisionsWizSidebarRevisionTitleTextboxContainer { align-items:flex-start !important; }' +
+        // left edge of the Container instead. Nested (expand-arrow) rows
+        // use a sibling "Indent" container class — same default centering,
+        // same fix needed, otherwise their date label visually shifts right.
+        '.appsDocsRevisionsWizSidebarRevisionTitleTextboxContainer,' +
+        '.appsDocsRevisionsWizSidebarIndentRevisionTitleTextboxContainer ' +
+        '{ align-items:flex-start !important; }' +
         '.dr-full-history-row { padding:8px 16px; font-family:Google Sans,Roboto,sans-serif; display:flex; align-items:center; gap:24px; }' +
         '.dr-full-history-btn { padding:4px 10px; font-size:12px; }' +
         // Diffs|Versions segmented mode toggle. Two buttons share a single
