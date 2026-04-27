@@ -103,6 +103,16 @@ twice returns the checkbox to its initial state. SelectedTile stays put
   belt-and-braces re-arm: the interceptor re-arms `drInitCapture` if
   init's URL had no `start`, letting the toggle's follow-up XHR (with
   start) drive init capture.
+- The sidebar header (`.DocsSidebarComponentsHeaderContentContainer`)
+  and our injected `.dr-full-history-row` survive across VH
+  exit/re-enter — only the listitems and chromecover get torn down.
+- Consequence: anything visually derived from `body.dataset.drMode`
+  (e.g., the Diffs|Versions toggle's selected-class) must be reconciled
+  on the body observer tick, not at row-creation time, or it will keep
+  stale state on the second open.
+- `armIfChromecoverAdded` resets `drMode = 'diffs'` synchronously on
+  re-entry; the toggle visual reconcile lives in `injectVersionButtons`
+  via `updateModeButtons`, which runs every tick.
 
 Locate the checkbox by label text — element ids and classes are dynamic:
 

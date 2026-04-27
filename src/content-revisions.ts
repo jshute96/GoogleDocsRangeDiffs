@@ -105,6 +105,12 @@
     if (styleEl.textContent !== styleText) styleEl.textContent = styleText;
 
     injectFullHistoryButton();
+    // Always reconcile the Diffs|Versions toggle visual state to drMode —
+    // injectFullHistoryButton early-returns when the header row already
+    // exists (e.g., the header survived a VH close/reopen), and without
+    // this call the previous session's selected-button class persists even
+    // though armIfChromecoverAdded reset drMode to 'diffs' on re-entry.
+    updateModeButtons();
     hideHighlightChangesControl();
 
     const items = document.querySelectorAll('[aria-label="Versions"] [role="listitem"]');

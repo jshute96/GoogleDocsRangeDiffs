@@ -18,10 +18,12 @@ import {
   extractDiffContents,
   clickListitem,
   clickDiffFullHistory,
+  clickModeToggle,
   exitVersionHistory,
   reenterVersionHistory,
   switchDropdown,
   lastRewroteRange,
+  getMode,
 } from '../helpers-extension';
 import {
   createRecorder,
@@ -76,6 +78,28 @@ test('exit and re-enter Version History: first item selected, From/To re-armed',
   const state = await getRangeState(page);
   expect(state.selectedIdx).toBe(0);
   await expectRange(page, 0, 0);
+});
+
+test('exit and re-enter Version History after Versions mode: toggle visual resets to Diffs', async ({ page }) => {
+  // Reproduces the sticky-toggle bug: after switching to Versions mode and
+  // closing/reopening VH, the segmented toggle used to keep "Versions"
+  // highlighted even though armIfChromecoverAdded resets drMode to 'diffs'.
+  await clickModeToggle(page, 'versions');
+  expect(await getMode(page)).toBe('versions');
+
+  await exitVersionHistory(page);
+  await reenterVersionHistory(page);
+
+  expect(await getMode(page)).toBe('diffs');
+  const selected = await page.evaluate(() => {
+    const diffs = document.querySelector('.dr-mode-diffs');
+    const versions = document.querySelector('.dr-mode-versions');
+    return {
+      diffs: !!diffs?.classList.contains('dr-mode-selected'),
+      versions: !!versions?.classList.contains('dr-mode-selected'),
+    };
+  });
+  expect(selected).toEqual({ diffs: true, versions: false });
 });
 
 test('Diff full history (item[0] already selected): spans full list, item[0] stays selected', async ({ page, logs, diffResponses }) => {
