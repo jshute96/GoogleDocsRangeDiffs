@@ -3,6 +3,10 @@
 This extension improves the version history UI in Google Docs, adding
 UI for diffs between a range of versions, and some other improvements.
 
+## Installation
+
+**[Install from the Chrome Web Store](https://chromewebstore.google.com/detail/google-docs-range-diffs/cajklbmeabipgbbnjhjpgcgpmcolebnd).**
+
 ## Usage
 
 ### Getting to Version history
@@ -50,39 +54,6 @@ The extension also includes some additional UI improvements.
     mode where it overrides `Show highlights` and loads versions instead of diffs.
   - See [`docs/fix-google-docs-start-version-bug.md`](docs/fix-google-docs-start-version-bug.md) for details.
 
-## Installation
-
-### From the Chrome Web Store
-
-**[Install from the Chrome Web Store](https://chromewebstore.google.com/detail/google-docs-range-diffs/cajklbmeabipgbbnjhjpgcgpmcolebnd).**
-
-### From a release zip
-
-1. Download the latest `GoogleDocsRangeDiffs-vX.Y.Z.zip` from the
-   [Releases page](https://github.com/jshute96/GoogleDocsRangeDiffs/releases)
-   and unzip it in a new directory.
-2. In Chrome:
-   1. Open `chrome://extensions`.
-   2. Enable **Developer mode**.
-   3. Click **Load unpacked** and select the unzipped directory.
-
-### From source
-
-1. Clone this repo and install dependencies:
-   ```bash
-   git clone https://github.com/jshute96/GoogleDocsRangeDiffs.git
-   cd GoogleDocsRangeDiffs
-   npm install
-   ```
-2. Build the extension:
-   ```bash
-   npm run build
-   ```
-3. In Chrome:
-   1. Open `chrome://extensions`.
-   2. Enable **Developer mode**.
-   3. Click **Load unpacked** and select the `dist/` directory.
-
 ## Development
 
 ### Building
@@ -91,6 +62,24 @@ The extension also includes some additional UI improvements.
 npm install      # one-time setup
 npm run build    # build extension in dist/
 ```
+
+### Installing from source
+
+1. Do a build (updating `dist/`).
+2. In Chrome:
+   1. Open `chrome://extensions`.
+   2. Enable **Developer mode**.
+   3. Click **Load unpacked** and select the `dist/` directory.
+
+### Installing from a release zip
+
+1. Download the latest `GoogleDocsRangeDiffs-vX.Y.Z.zip` from the
+   [Releases page](https://github.com/jshute96/GoogleDocsRangeDiffs/releases)
+   and unzip it in a new directory.
+2. In Chrome:
+   1. Open `chrome://extensions`.
+   2. Enable **Developer mode**.
+   3. Click **Load unpacked** and select the unzipped directory.
 
 ### Testing
 
