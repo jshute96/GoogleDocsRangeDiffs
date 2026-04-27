@@ -81,3 +81,10 @@ One-line descriptions of every source file, grouped by directory.
 | `notes-on-testing.md` | Testing setup, Google login challenges, what works (connectOverCDP) and what doesn't |
 | `notes-on-ui-debugging.md` | Playwright+CDP tips for interactive debug scripts: extension reload, DOM probing, style source lookup |
 | `privacy-policy.md` | Privacy policy: no data collection; explains each declared Chrome permission |
+
+## Chrome Web Store Assets (`docs/chrome-web-store/`)
+
+| File | Description |
+|------|-------------|
+| `description.txt` | Listing description used on the Chrome Web Store |
+| `*.png` | Saved screenshots from the Chrome Web Store listing |

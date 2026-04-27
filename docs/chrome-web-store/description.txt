@@ -1,0 +1,29 @@
+Google Docs Range Diffs improves the Version History UI in Google Docs, making it easier to view the edit history of your docs.
+
+FEATURES
+
+◆ View changes between any pair of versions
+◆ View the full document history as a single diff
+◆ Toggle between viewing diffs and viewing version snapshots
+◆ Enjoy various other UI fixes and improvements
+
+USAGE
+
+◆ Open Version History one of three ways:
+   ◇ Click the clock icon (in the upper right)
+   ◇ Use the File → Version history menu
+   ◇ Use keyboard shortcut Ctrl+Alt+Shift+H
+◆ Use the new controls:
+   ◇ Click «Diffs» or «Versions» to change view mode
+   ◇ Click «Start here» or «End here» to make ranges (or grow or shrink a range)
+   ◇ Click «Diff full history» for a range covering all changes
+
+NOTE: Google Docs only allows users with Editor access to view Version History.
+
+PRIVACY
+
+Does not collect or transmit any data. Runs entirely in your browser.
+
+OPEN SOURCE
+
+See https://github.com/jshute96/GoogleDocsRangeDiffs for source code and more details.

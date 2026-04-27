@@ -52,7 +52,11 @@ The extension also includes some additional UI improvements.
 
 ## Installation
 
-### Chrome extension (from a release zip)
+### From the Chrome Web Store
+
+**[Install from the Chrome Web Store](https://chromewebstore.google.com/detail/google-docs-range-diffs/cajklbmeabipgbbnjhjpgcgpmcolebnd).**
+
+### From a release zip
 
 1. Download the latest `GoogleDocsRangeDiffs-vX.Y.Z.zip` from the
    [Releases page](https://github.com/jshute96/GoogleDocsRangeDiffs/releases)
@@ -62,7 +66,7 @@ The extension also includes some additional UI improvements.
    2. Enable **Developer mode**.
    3. Click **Load unpacked** and select the unzipped directory.
 
-### Chrome extension (from source)
+### From source
 
 1. Clone this repo and install dependencies:
    ```bash
