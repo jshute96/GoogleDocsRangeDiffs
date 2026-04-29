@@ -49,6 +49,20 @@ In Versions mode the rewrite branch always strips `start`, regardless of overrid
 
 The Diffs|Versions toggle is the user-facing control; Docs' "Highlight changes" checkbox is now an internal lever we toggle programmatically. The content script hides the checkbox + label via a `dr-hidden-highlight-changes` wrapper class so the user only sees one control. `HTMLInputElement.click()` still toggles `checked` on a hidden input, so the polarity-fix and mode-entry paths work unchanged.
 
+### Checkbox-driven paths are polarity-agnostic
+
+Any code path that drives a refetch via the Highlight-changes checkbox must avoid branching on `checkbox.checked` to decide *whether* or *how many times* to toggle. The relationship between checkbox state and URL form inverts under polarity flip, so any such branch silently misbehaves after the flip.
+
+Affected paths:
+
+- `enterVersionsMode` / `enterDiffsMode`: always click the checkbox once when the user picks the opposite mode (no `checked`-state gate). `setMode` already early-returns when the requested mode equals the current mode, so a single toggle always corresponds to a real transition.
+- `handleFullHistoryClick`: when the newest item is already selected, toggle the checkbox twice (Docs would no-op a click on the selected item). Two clicks restore checkbox state and fire two refetches that both get rewritten to 1:maxRev. When the newest item is not selected, click it directly — no checkbox involvement.
+
+Why this is sufficient:
+
+- Toggling once always swaps URL behavior under the current polarity (checked↔start+end vs end-only flips on every click, regardless of which polarity is active).
+- The Versions-mode rewrite branch strips `start` regardless of what URL Docs produces; the Diffs-mode branch applies any overrides. The displayed content lands consistent with the selected mode under either polarity.
+
 ## Coverage
 
 - `testing/tests/no-extension-docs-version-fallback-bug.spec.ts` reproduces the bug + polarity XOR without the extension, using `armOneShotShowRevisionDelay` to make one diff fetch slow.

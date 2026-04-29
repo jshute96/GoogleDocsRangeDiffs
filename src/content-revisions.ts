@@ -645,9 +645,15 @@
 
   // Enter Versions mode: clear override + lit state, apply Versions-mode
   // button visibility (Start below selected, End above, Diff on selected
-  // unlit), and uncheck Highlight changes so Docs renders the selected
-  // revision as a single-version view (showrevision URL goes out as ?end=E
-  // with no start).
+  // unlit), and toggle Highlight changes once so Docs fires a fresh
+  // showrevision the rewrite branch can strip `start` from. We always
+  // toggle (regardless of current checkbox state) because polarity-flip
+  // (issue #2) inverts the relationship between checkbox state and URL
+  // behavior — under inverted polarity, Diffs mode leaves the checkbox
+  // unchecked, so an "if (!checkbox.checked) return" gate would no-op the
+  // mode switch. A single toggle always swaps URL behavior under either
+  // polarity, and the Versions-mode rewrite branch strips `start`
+  // regardless, so the displayed content lands correct.
   async function enterVersionsMode(): Promise<void> {
     document.body.dataset.drMode = 'versions';
     updateModeButtons();
@@ -665,27 +671,35 @@
     }
     applyVersionsModeButtons();
     const checkbox = findHighlightChangesCheckbox();
-    if (!checkbox || !checkbox.checked) return;
+    if (!checkbox) return;
     document.body.dataset.drToggleRefetchPending = '1';
     checkbox.click();
     await waitForToggleRefetchSettled();
   }
 
-  // Enter Diffs mode: re-check Highlight changes so Docs fires showrevision
-  // with start+end for the selected revision, and arm capture so the
-  // resulting URL's range becomes both bounds (From=To on selected, with
-  // the Diff button lit). We arm capture inline on the SelectedTile rather than
-  // via drInitCapture, because armBothOnSelected re-resolves SelectedTile at
-  // XHR.open() time — Docs occasionally re-renders listitems between the
-  // click and the XHR, which can leave a transient window where no element
-  // has the SelectedTile class and armBothOnSelected silently bails.
+  // Enter Diffs mode: toggle Highlight changes once so Docs fires
+  // showrevision with start+end for the selected revision, and arm
+  // capture so the resulting URL's range becomes both bounds (From=To on
+  // selected, with the Diff button lit). We arm capture inline on the
+  // SelectedTile rather than via drInitCapture, because armBothOnSelected
+  // re-resolves SelectedTile at XHR.open() time — Docs occasionally
+  // re-renders listitems between the click and the XHR, which can leave
+  // a transient window where no element has the SelectedTile class and
+  // armBothOnSelected silently bails.
+  //
+  // We always toggle (regardless of current checkbox state) for the same
+  // polarity-flip reason as enterVersionsMode: under inverted polarity
+  // (issue #2), Versions mode leaves the checkbox checked, so an
+  // "if (checkbox.checked) return" gate would no-op the mode switch.
+  // A single toggle always swaps URL behavior, producing a fresh
+  // start+end showrevision the capture branch can record.
   async function enterDiffsMode(): Promise<void> {
     document.body.dataset.drMode = 'diffs';
     updateModeButtons();
     // Entering Diffs arms a fresh both-on-selected range, not sticky-from-one.
     delete document.body.dataset.drStickyFromOne;
     const checkbox = findHighlightChangesCheckbox();
-    if (!checkbox || checkbox.checked) return;
+    if (!checkbox) return;
     const items = document.querySelectorAll('[aria-label="Versions"] [role="listitem"]');
     let selected: Element | null = null;
     for (let i = 0; i < items.length; i++) {
@@ -784,23 +798,24 @@
     document.body.dataset.drMode = 'diffs';
     updateModeButtons();
 
+    // Drive a refetch that the rewrite branch will stamp as 1:maxRev.
+    // Polarity-agnostic — we don't gate on checkbox.checked because that
+    // assumption inverts under polarity flip (issue #2): Diffs mode leaves
+    // the checkbox checked under normal polarity but unchecked under
+    // inverted polarity, so a "if (!checkbox.checked)" branch misfires after
+    // the flip and the click silently no-ops.
+    //
+    // - First already selected: Docs treats first.click() as a no-op, so
+    //   drive the refetch via the checkbox. Toggle twice — fires two
+    //   refetches (both rewritten) and the checkbox ends in the same state,
+    //   keeping its polarity-state alignment with drMode='diffs'.
+    // - First not selected: clicking it selects + fires showrevision; the
+    //   rewrite branch applies the 1:maxRev override regardless of the
+    //   incoming URL form.
     const checkbox = findHighlightChangesCheckbox();
-    if (!checkbox) return;
-
-    if (!checkbox.checked) {
-      // Versions → Diffs transition: a single toggle fires one rewriteable
-      // showrevision for the currently-selected revision.
-      document.body.dataset.drToggleRefetchPending = '1';
-      checkbox.click();
-    } else if (isSelected(first)) {
-      // Already in Diffs with first selected: Docs treats a click on it
-      // as a no-op, so toggle twice for two showrevisions.
-      toggleHighlightChangesTwice(checkbox);
-    }
-
-    if (!isSelected(first)) {
-      // Make sure first ends up selected. fires another showrevision that
-      // also gets rewritten to 1:maxRev.
+    if (isSelected(first)) {
+      if (checkbox) toggleHighlightChangesTwice(checkbox);
+    } else {
       document.body.dataset.drSuppressCapture = '1';
       try {
         first.click();

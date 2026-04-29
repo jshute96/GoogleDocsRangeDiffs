@@ -71,6 +71,37 @@ test('post-bug clicks still produce correct diff content (single trigger)', asyn
   expect(c3.before).toBe(recorder.versions[4]?.after ?? '');
 });
 
+test('mode toggle works after polarity flip while in Diffs mode', async ({ page, diffResponses }) => {
+  test.setTimeout(60_000);
+
+  // Trigger the bug while still in Diffs mode (the default). The slow
+  // start+ showrevision plus its auto-refetch land us in inverted polarity
+  // with the Highlight-changes checkbox in the state that Diffs mode
+  // settles on under that polarity. Earlier this left enterVersionsMode's
+  // checkbox-state guard ("if (!checkbox.checked) return") matching, so
+  // the click did nothing — no XHR, no rewrite. The fix removes that gate
+  // so a single toggle always fires a refetch.
+  await armOneShotShowRevisionDelay(page, 5000);
+  await clickListitem(page, 1);
+  await page.waitForTimeout(3000);
+
+  diffResponses.clear();
+
+  // Click Versions. Must produce a showrevision request whose recorded
+  // response has no `start` (Versions rewrite strips it regardless of
+  // polarity). Pre-fix: the click was a silent no-op.
+  await clickModeToggle(page, 'versions');
+
+  const startless = diffResponses.all().filter((e) => e.start === undefined);
+  expect(startless.length, 'mode toggle to Versions must fire a start-less showrevision').toBeGreaterThan(0);
+
+  // And toggling back to Diffs after polarity flip should also work.
+  diffResponses.clear();
+  await clickModeToggle(page, 'diffs');
+  const withStart = diffResponses.all().filter((e) => e.start !== undefined);
+  expect(withStart.length, 'mode toggle to Diffs must fire a start+end showrevision').toBeGreaterThan(0);
+});
+
 test('Versions mode survives the bug: rewrite always strips start', async ({ page, diffResponses, logs }) => {
   test.setTimeout(60_000);
   // Switch to Versions mode first. enterVersionsMode toggles Highlight
