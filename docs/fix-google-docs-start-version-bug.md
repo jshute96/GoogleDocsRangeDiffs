@@ -24,7 +24,7 @@ Google Docs sometimes fires a `showrevision` request without a `start` parameter
   - **Normal polarity**: checkbox checked → `start+end`; unchecked → `end` only.
   - **Inverted polarity** (post-bug): checkbox checked → `end` only; unchecked → `start+end`.
 - Each slow-diff trigger flips the polarity. Toggling the checkbox does *not* flip the polarity — it just moves along the current polarity's mapping.
-- Tab reload resets polarity to normal. A second slow-diff trigger flips polarity back to normal (observed empirically; not asserted in the repro).
+- Tab reload resets polarity to normal. Closing and reopening the Version History pane also resets it. A second slow-diff trigger flips polarity back to normal (observed empirically; not asserted in the repro).
 
 ## The fix: polarity-fix toggle
 
