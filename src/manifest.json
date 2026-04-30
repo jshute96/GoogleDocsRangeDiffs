@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Google Docs Range Diffs",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Adds diff-between-versions feature to Google Docs",
   "homepage_url": "https://github.com/jshute96/GoogleDocsRangeDiffs/blob/main/README.md",
   "permissions": ["scripting"],
