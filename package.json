@@ -4,11 +4,12 @@
   "private": true,
   "description": "Chrome extension that adds diff-between-versions feature to Google Docs",
   "type": "module",
+  "packageManager": "pnpm@11.22.0",
   "scripts": {
+    "preinstall": "npx only-allow pnpm",
     "build": "node scripts/build.mjs",
     "watch": "node scripts/build.mjs --watch",
-    "pretest": "node scripts/build.mjs",
-    "test": "playwright test -c testing/playwright.config.ts",
+    "test": "node scripts/build.mjs && playwright test -c testing/playwright.config.ts",
     "clean": "rm -rf dist test-results playwright-report"
   },
   "devDependencies": {

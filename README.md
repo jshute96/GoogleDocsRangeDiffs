@@ -59,8 +59,8 @@ The extension also includes some additional UI improvements.
 ### Building
 
 ```bash
-npm install      # one-time setup
-npm run build    # build extension in dist/
+pnpm install      # one-time setup
+pnpm run build    # build extension in dist/
 ```
 
 ### Installing from source
@@ -94,7 +94,7 @@ see the history, but the tests don't make any edits.)
 
 1. Install Playwright
    ```bash
-   npx playwright install chromium
+   pnpm exec playwright install chromium
    ```
 2. Create `testing/test_config.json` from the template and point
    `test_doc` at a Google Doc.
@@ -117,9 +117,9 @@ open a parallel browser *without* the extension.
 #### Running tests
 
 ```bash
-npm run build                                # build
-npm test                                     # all tests
-npm test -- testing/tests/smoke.spec.ts      # one test file
+pnpm run build                                # build
+pnpm test                                     # all tests
+pnpm test testing/tests/smoke.spec.ts         # one test file
 ```
 
 #### Debugging in Chrome developer console

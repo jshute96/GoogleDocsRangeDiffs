@@ -3,7 +3,7 @@
  *
  * Shares the with-extension browser (CDP port 9222) and disables the
  * extension via the chrome://extensions enable toggle for the duration of
- * this suite. One profile, one login — `npm test` runs the suites
+ * this suite. One profile, one login — `pnpm test` runs the suites
  * sequentially so the two never fight over the toggle.
  *
  * Worker-scoped `_sharedContext` / `_sharedPage` share one tab across tests

@@ -9,10 +9,10 @@
 //   4. Runs the TypeScript compiler (tsc) to compile src/*.ts -> dist/*.js.
 //      With --watch, tsc keeps running and rebuilds on change.
 //
-// Run with `npm run build`. Pass --watch to keep tsc running.
+// Run with `pnpm run build`. Pass --watch to keep tsc running.
 //
 // Note on watch mode: only TypeScript files are watched. If you edit
-// src/manifest.json or swap out icon files, re-run `npm run build`.
+// src/manifest.json or swap out icon files, re-run `pnpm run build`.
 
 import { rm, mkdir, cp } from 'node:fs/promises';
 import { spawn, spawnSync } from 'node:child_process';

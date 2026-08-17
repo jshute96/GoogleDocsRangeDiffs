@@ -11,10 +11,10 @@ import { defineConfig } from '@playwright/test';
  * fight over the toggle.
  *
  * Run with:
- *   npm test                                              # both projects
- *   npm test -- --project extension                       # only extension
- *   npm test -- --project no-extension                    # only no-extension
- *   npm test -- testing/tests/smoke.spec.ts               # single file
+ *   pnpm test                                              # both projects
+ *   pnpm test --project extension                          # only extension
+ *   pnpm test --project no-extension                       # only no-extension
+ *   pnpm test testing/tests/smoke.spec.ts                  # single file
  */
 export default defineConfig({
   testDir: 'tests',

@@ -58,7 +58,8 @@ interface ConfigureOptions {
  *
  * No-op for `enabled` if the extension is already in the requested state.
  * The reload click always fires when `enabled: true, reload: true`, since
- * `pretest` rebuilt `dist/` and we want the new build picked up.
+ * `pnpm test`'s build step rebuilt `dist/` and we want the new build
+ * picked up.
  */
 export async function configureExtension(
   context: BrowserContext,

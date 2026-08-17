@@ -90,10 +90,10 @@ the right pair.
 
 Run with:
 ```bash
-npm test                                       # both projects, sequential
-npm test -- --project extension                # extension only
-npm test -- --project no-extension             # no-extension only
-npm test -- testing/tests/smoke.spec.ts        # one file
+pnpm test                                       # both projects, sequential
+pnpm test --project extension                   # extension only
+pnpm test --project no-extension                # no-extension only
+pnpm test testing/tests/smoke.spec.ts           # one file
 ```
 
 The projects share the same browser. The config keeps them sequential
@@ -159,7 +159,8 @@ and re-runs worker setup at each project boundary:
   and re-enters, which retriggers init-capture so each test starts with
   item[0] selected and From/To collapsed on it.
 - The extension is reloaded exactly once per worker inside the
-  `_sharedPage` fixture (so `pretest`'s fresh `dist/` is picked up).
+  `_sharedPage` fixture (so the fresh `dist/` built by `pnpm test` is
+  picked up).
   `configureExtension` opens a transient `chrome://extensions` tab —
   the one per-worker window-raise we accept. Don't add a `beforeEach`
   reload.
@@ -178,9 +179,9 @@ and re-runs worker setup at each project boundary:
   chromecover's back arrow (`.docs-revisions-chromecover-titlebar-button-back`)
   needs a real click via Playwright — use
   `page.locator(...).click()` or `page.$(sel).click()`.
-- **Extension reload is required** after `npm run build`. Use
+- **Extension reload is required** after `pnpm run build`. Use
   `reloadExtension(context)` (drives chrome://extensions' reload
-  button via its shadow DOM). `pretest` rebuilds `dist/` but Chrome
+  button via its shadow DOM). `pnpm test` rebuilds `dist/` but Chrome
   doesn't pick it up automatically.
 - **Item 0 (the SelectedTile on open) can't be clicked to trigger a
   showrevision** — Docs treats a click on the already-selected version
@@ -262,7 +263,7 @@ browser (port 9222). The test workflow:
 1. Open the with-extension browser with `open-browser-with-extension.sh`
    (or let the fixture auto-launch — see below)
 2. Log in to Google (once — sessions persist across runs)
-3. Run `npm test` (connects to the running browser)
+3. Run `pnpm test` (connects to the running browser)
 
 ### Auto-launch on missing CDP
 
@@ -275,7 +276,7 @@ subsequent test runs reuse the same window. Fresh profiles still need
 an interactive Google login — auto-launch only handles the "I forgot
 to start the browser" case.
 
-`pretest` rebuilds `dist/` so the launched browser always sees a
+`pnpm test` rebuilds `dist/` so the launched browser always sees a
 current build.
 
 ## What the extension injects

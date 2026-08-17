@@ -11,9 +11,9 @@
 #   scripts/open-browser-with-extension.sh <url>        # custom URL
 #
 # Prerequisites:
-#   npm install
-#   npx playwright install chromium
-#   npm run build
+#   pnpm install
+#   pnpm exec playwright install chromium
+#   pnpm run build
 
 set -euo pipefail
 
@@ -25,7 +25,7 @@ URL="${1:-about:blank}"
 
 # Ensure the extension is built
 if [[ ! -d "$EXTENSION_DIR" || ! -f "$EXTENSION_DIR/manifest.json" ]]; then
-  echo "Extension not built. Run: npm run build" >&2
+  echo "Extension not built. Run: pnpm run build" >&2
   exit 1
 fi
 
@@ -33,7 +33,7 @@ fi
 CHROME=$(find ~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome 2>/dev/null | sort -V | tail -1)
 if [[ -z "$CHROME" ]]; then
   echo "Error: Playwright's bundled Chromium not found." >&2
-  echo "Install it with: npx playwright install chromium" >&2
+  echo "Install it with: pnpm exec playwright install chromium" >&2
   exit 1
 fi
 

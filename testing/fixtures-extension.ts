@@ -109,9 +109,10 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     async ({ _sharedContext, testDocUrl }, use) => {
       // Make sure the extension is enabled (the no-extension suite shares
       // this browser and may have left it off) and reload it so it picks
-      // up the freshly-built dist/ from `pretest`. Both happen in one
-      // chrome://extensions visit — the one per-worker window-raise we
-      // tolerate (CDP's `Target.createTarget` raises the OS window).
+      // up the freshly-built dist/ from `pnpm test`'s build step. Both
+      // happen in one chrome://extensions visit — the one per-worker
+      // window-raise we tolerate (CDP's `Target.createTarget` raises the
+      // OS window).
       await configureExtension(_sharedContext, { enabled: true, reload: true });
       // Reuse an existing tab if one looks disposable (about:blank or
       // already on Docs) — `newPage` raises the OS window because CDP's

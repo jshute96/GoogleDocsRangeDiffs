@@ -103,7 +103,7 @@ t('docs slow-diff fallback walkthrough', async ({ page }) => {
   test.setTimeout(120_000);
 
   // Reload the doc to drop any in-memory polarity state left by a
-  // previous run. The shared CDP browser persists tabs across `npm test`
+  // previous run. The shared CDP browser persists tabs across `pnpm test`
   // invocations, so without an explicit reload we may inherit an
   // inverted-polarity session and the baseline phases would observe
   // the wrong behavior. Clear storage too — Docs caches some session

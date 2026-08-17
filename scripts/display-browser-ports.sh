@@ -8,7 +8,7 @@
 #   scripts/display-browser-ports.sh
 #
 # Prerequisites:
-#   npm install   # Playwright is used to drive each browser over CDP
+#   pnpm install   # Playwright is used to drive each browser over CDP
 
 set -euo pipefail
 

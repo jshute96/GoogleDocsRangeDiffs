@@ -32,7 +32,7 @@ if (!page) page = await ctx.newPage();
 
 ## Reloading the extension after code changes
 
-The unpacked extension doesn't hot-reload. After `npm run build`:
+The unpacked extension doesn't hot-reload. After `pnpm run build`:
 
 - **Best path:** drive `chrome://extensions` and click the per-extension
   reload button.
